@@ -32,7 +32,7 @@ const args = [
   "-f",
   `name=${projectName}`,
   "-F",
-  "private=true",
+  "private=false",
   "-F",
   "include_all_branches=false",
 ];
