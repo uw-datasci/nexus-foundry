@@ -52,6 +52,16 @@ permissions:
 jobs:
   launch:
     runs-on: ubuntu-latest
+    outputs:
+      project_name: ${{ steps.payload.outputs.project_name }}
+      team_access: ${{ steps.payload.outputs.team_access }}
+      project_type: ${{ steps.payload.outputs.project_type }}
+      database: ${{ steps.payload.outputs.database }}
+      postgres_provider: ${{ steps.payload.outputs.postgres_provider }}
+      mongo_client: ${{ steps.payload.outputs.mongo_client }}
+      redis: ${{ steps.payload.outputs.redis }}
+      s3: ${{ steps.payload.outputs.s3 }}
+      description: ${{ steps.payload.outputs.description }}
     steps:
       - name: Resolve payload from trigger type
         id: payload
@@ -92,7 +102,22 @@ jobs:
           echo "Description: ${{ steps.payload.outputs.description }}"
 
       # TODO: add actual provisioning logic:
-      # - create repo from template
       # - set team permissions
       # - create secrets/variables
       # - open initial issue / PR
+
+  create_repo:
+    runs-on: ubuntu-latest
+    needs: launch
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create repository from template
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_ORG: ${{ github.repository_owner }}
+          PROJECT_NAME: ${{ needs.launch.outputs.project_name }}
+          PROJECT_TYPE: ${{ needs.launch.outputs.project_type }}
+          DESCRIPTION: ${{ needs.launch.outputs.description }}
+        run: node .github/scripts/create_repo.js
