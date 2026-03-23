@@ -115,7 +115,7 @@ jobs:
 
       - name: Create repository from template
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.FOUNDRY_GITHUB_TOKEN }}
           TARGET_ORG: ${{ github.repository_owner }}
           PROJECT_NAME: ${{ needs.launch.outputs.project_name }}
           PROJECT_TYPE: ${{ needs.launch.outputs.project_type }}
