@@ -20,13 +20,23 @@ on:
         required: true
         type: string
       postgres_provider:
-        description: "Postgres provider (optional)"
+        description: "When database is postgres: supabase or neon"
         required: false
-        type: string
+        type: choice
+        default: ""
+        options:
+          - ""
+          - supabase
+          - neon
       mongo_client:
-        description: "Mongo client (optional)"
+        description: "When database is mongodb: mongodb (driver) or mongoose"
         required: false
-        type: string
+        type: choice
+        default: ""
+        options:
+          - ""
+          - mongodb
+          - mongoose
       redis:
         description: "Enable Redis (true|false)"
         required: false
@@ -88,6 +98,7 @@ jobs:
           echo "Redis: ${{ steps.payload.outputs.redis }}"
           echo "S3: ${{ steps.payload.outputs.s3 }}"
           echo "Description: ${{ steps.payload.outputs.description }}"
+
   create_repo:
     runs-on: ubuntu-latest
     needs: setup
@@ -104,3 +115,74 @@ jobs:
           DESCRIPTION: ${{ needs.setup.outputs.description }}
           TEAM_ACCESS: ${{ needs.setup.outputs.team_access }}
         run: node .github/scripts/create_repo.js
+
+  secrets_setup:
+    runs-on: ubuntu-latest
+    needs: [setup, create_repo]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Infisical — project folder at root
+        uses: actions/github-script@v8
+        env:
+          PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
+          INFISICAL_TOKEN: ${{ secrets.INFISICAL_TOKEN }}
+          INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
+        with:
+          script: |
+            const { main } = require("${{ github.workspace }}/.github/scripts/secrets_setup.js");
+            await main();
+  
+  db_setup:
+    runs-on: ubuntu-latest
+    needs: [setup, secrets_setup]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup database
+        uses: actions/github-script@v8
+        env:
+          DATABASE: ${{ needs.setup.outputs.database }}
+          POSTGRES_PROVIDER: ${{ needs.setup.outputs.postgres_provider }}
+          MONGO_CLIENT: ${{ needs.setup.outputs.mongo_client }}
+          PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_ORG_ID: ${{ secrets.NEON_ORG_ID }}
+        with:
+          script: |
+            const { main } = require("${{ github.workspace }}/.github/scripts/db_setup.js");
+            await main();
+
+  # redis_setup:
+  #   runs-on: ubuntu-latest
+  #   needs: secrets_setup
+  #   steps:
+  #     - name: Setup Redis
+  #       run: |
+  #         echo "Redis setup"
+
+  # s3_setup:
+  #   runs-on: ubuntu-latest
+  #   needs: secrets_setup
+  #   steps:
+  #     - name: Setup S3
+  #       run: |
+  #         echo "S3 setup"
+
+  # vercel_setup:
+  #   runs-on: ubuntu-latest
+  #   needs: secrets_setup
+  #   steps:
+  #     - name: Setup Vercel
+  #       run: |
+  #         echo "Vercel setup"
+
+  # ci_setup:
+  #   runs-on: ubuntu-latest
+  #   needs: secrets_setup
+  #   steps:
+  #     - name: Setup CI
+  #       run: |
+  #         echo "CI setup"
