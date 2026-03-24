@@ -67,15 +67,15 @@ jobs:
         id: payload
         shell: bash
         run: |
-          echo "project_name=${{ github.event.client_payload.projectName }}" >> "$GITHUB_OUTPUT"
-          echo "team_access=${{ github.event.client_payload.teamAccess }}" >> "$GITHUB_OUTPUT"
-          echo "project_type=${{ github.event.client_payload.projectType }}" >> "$GITHUB_OUTPUT"
-          echo "database=${{ github.event.client_payload.database }}" >> "$GITHUB_OUTPUT"
-          echo "postgres_provider=${{ github.event.client_payload.postgresProvider }}" >> "$GITHUB_OUTPUT"
-          echo "mongo_client=${{ github.event.client_payload.mongoClient }}" >> "$GITHUB_OUTPUT"
-          echo "redis=${{ github.event.client_payload.extras.redis }}" >> "$GITHUB_OUTPUT"
-          echo "s3=${{ github.event.client_payload.extras.s3 }}" >> "$GITHUB_OUTPUT"
-          echo "description=${{ github.event.client_payload.description }}" >> "$GITHUB_OUTPUT"
+          echo "project_name=${{ inputs.project_name }}" >> "$GITHUB_OUTPUT"
+          echo "team_access=${{ inputs.team_access }}" >> "$GITHUB_OUTPUT"
+          echo "project_type=${{ inputs.project_type }}" >> "$GITHUB_OUTPUT"
+          echo "database=${{ inputs.database }}" >> "$GITHUB_OUTPUT"
+          echo "postgres_provider=${{ inputs.postgres_provider }}" >> "$GITHUB_OUTPUT"
+          echo "mongo_client=${{ inputs.mongo_client }}" >> "$GITHUB_OUTPUT"
+          echo "redis=${{ inputs.redis }}" >> "$GITHUB_OUTPUT"
+          echo "s3=${{ inputs.s3 }}" >> "$GITHUB_OUTPUT"
+          echo "description=${{ inputs.description }}" >> "$GITHUB_OUTPUT"
 
       - name: Log request (placeholder)
         run: |
