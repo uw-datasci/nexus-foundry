@@ -123,7 +123,7 @@ jobs:
 
   secrets_setup:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo]
+    needs: setup
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -139,7 +139,7 @@ jobs:
   
   db_setup:
     runs-on: ubuntu-latest
-    needs: [setup, secrets_setup]
+    needs: [setup, create_repo, secrets_setup]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -174,13 +174,13 @@ jobs:
   #       run: |
   #         echo "S3 setup"
 
-  # vercel_setup:
-  #   runs-on: ubuntu-latest
-  #   needs: secrets_setup
-  #   steps:
-  #     - name: Setup Vercel
-  #       run: |
-  #         echo "Vercel setup"
+  vercel_setup:
+    runs-on: ubuntu-latest
+    needs: [setup, create_repo, secrets_setup]
+    steps:
+      - name: Setup Vercel
+        run: |
+          echo "Vercel setup"
 
   # ci_setup:
   #   runs-on: ubuntu-latest
