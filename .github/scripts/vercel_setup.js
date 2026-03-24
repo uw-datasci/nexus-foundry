@@ -159,10 +159,10 @@ class VercelSetup {
       },
     };
 
-    const created = await this.vercelRequest(
-      `/v11/projects?${teamQuery}`,
-      { method: "POST", body },
-    );
+    const created = await this.vercelRequest(`/v11/projects?${teamQuery}`, {
+      method: "POST",
+      body,
+    });
     const id = this.readVercelProjectId(created);
     console.log(`Vercel: created project '${projectName}' (id: ${id}).`);
     return { id, name: projectName };
@@ -222,7 +222,9 @@ class VercelSetup {
       spec.infisicalProjectId,
     );
     if (existing.some((s) => s.name === spec.name)) {
-      console.log(`Infisical: Vercel sync '${spec.name}' already exists, skip.`);
+      console.log(
+        `Infisical: Vercel sync '${spec.name}' already exists, skip.`,
+      );
       return;
     }
 
