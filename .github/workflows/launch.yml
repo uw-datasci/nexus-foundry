@@ -63,13 +63,31 @@ jobs:
       s3: ${{ steps.payload.outputs.s3 }}
       description: ${{ steps.payload.outputs.description }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
       - name: Resolve client payload
         id: payload
-        run: bash .github/scripts/setup.sh
+        shell: bash
+        run: |
+          echo "project_name=${{ github.event.client_payload.projectName }}" >> "$GITHUB_OUTPUT"
+          echo "team_access=${{ github.event.client_payload.teamAccess }}" >> "$GITHUB_OUTPUT"
+          echo "project_type=${{ github.event.client_payload.projectType }}" >> "$GITHUB_OUTPUT"
+          echo "database=${{ github.event.client_payload.database }}" >> "$GITHUB_OUTPUT"
+          echo "postgres_provider=${{ github.event.client_payload.postgresProvider }}" >> "$GITHUB_OUTPUT"
+          echo "mongo_client=${{ github.event.client_payload.mongoClient }}" >> "$GITHUB_OUTPUT"
+          echo "redis=${{ github.event.client_payload.extras.redis }}" >> "$GITHUB_OUTPUT"
+          echo "s3=${{ github.event.client_payload.extras.s3 }}" >> "$GITHUB_OUTPUT"
+          echo "description=${{ github.event.client_payload.description }}" >> "$GITHUB_OUTPUT"
 
+      - name: Log request (placeholder)
+        run: |
+          echo "Project: ${{ steps.payload.outputs.project_name }}"
+          echo "Team: ${{ steps.payload.outputs.team_access }}"
+          echo "Template: ${{ steps.payload.outputs.project_type }}"
+          echo "Database: ${{ steps.payload.outputs.database }}"
+          echo "Postgres provider: ${{ steps.payload.outputs.postgres_provider }}"
+          echo "Mongo client: ${{ steps.payload.outputs.mongo_client }}"
+          echo "Redis: ${{ steps.payload.outputs.redis }}"
+          echo "S3: ${{ steps.payload.outputs.s3 }}"
+          echo "Description: ${{ steps.payload.outputs.description }}"
   create_repo:
     runs-on: ubuntu-latest
     needs: setup
