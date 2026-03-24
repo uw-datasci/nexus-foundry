@@ -176,7 +176,7 @@ jobs:
 
   vercel_setup:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo, secrets_setup, db_setup]
+    needs: [setup, create_repo, secrets_setup]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
