@@ -1,6 +1,47 @@
 name: Foundry Launch
 
 on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: "New repository name (kebab-case)"
+        required: true
+        type: string
+      team_access:
+        description: "GitHub team slug"
+        required: true
+        type: string
+      project_type:
+        description: "Template repository name"
+        required: true
+        type: string
+      database:
+        description: "Database choice (postgres|mongodb)"
+        required: true
+        type: string
+      postgres_provider:
+        description: "Postgres provider (optional)"
+        required: false
+        type: string
+      mongo_client:
+        description: "Mongo client (optional)"
+        required: false
+        type: string
+      redis:
+        description: "Enable Redis (true|false)"
+        required: false
+        default: "false"
+        type: string
+      s3:
+        description: "Enable S3/R2 (true|false)"
+        required: false
+        default: "false"
+        type: string
+      description:
+        description: "Project description"
+        required: false
+        type: string
+
   repository_dispatch:
     types: [foundry-launch]
 
