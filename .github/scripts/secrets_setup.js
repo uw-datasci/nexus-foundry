@@ -12,7 +12,8 @@ class SecretsSetupPreprocessor {
   prepare() {
     this.assertRequiredEnv([
       "PROJECT_NAME",
-      "INFISICAL_TOKEN",
+      "INFISICAL_CLIENT_ID",
+      "INFISICAL_CLIENT_SECRET",
       "INFISICAL_PROJECT_ID",
     ]);
 
@@ -20,7 +21,8 @@ class SecretsSetupPreprocessor {
 
     return {
       projectName,
-      token: process.env.INFISICAL_TOKEN.trim(),
+      clientId: process.env.INFISICAL_CLIENT_ID.trim(),
+      clientSecret: process.env.INFISICAL_CLIENT_SECRET.trim(),
       projectId: process.env.INFISICAL_PROJECT_ID.trim(),
     };
   }
@@ -29,6 +31,29 @@ class SecretsSetupPreprocessor {
 class InfisicalFolderSetup {
   static API_BASE = "https://us.infisical.com";
   static ROOT_PATH = "/";
+
+  async login(clientId, clientSecret) {
+    const res = await fetch(
+      `${InfisicalFolderSetup.API_BASE}/api/v1/auth/universal-auth/login`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ clientId, clientSecret }),
+      },
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Infisical Login failed: ${res.status} ${text || res.statusText}`,
+      );
+    }
+
+    const data = await res.json();
+    return data.accessToken;
+  }
 
   /**
    * @param {string} pathnameWithQuery
@@ -159,12 +184,17 @@ class InfisicalFolderSetup {
 
 async function main() {
   const preprocessor = new SecretsSetupPreprocessor();
-  const { projectName, token, projectId } = preprocessor.prepare();
+  const { projectName, clientId, clientSecret, projectId } =
+    preprocessor.prepare();
 
   const infisical = new InfisicalFolderSetup();
+
+  console.log("Infisical: Exchanging Machine Identity for Access Token...");
+  const validToken = await infisical.login(clientId, clientSecret);
+
   for (const environment of INFISICAL_ENVIRONMENT_SLUGS) {
     await infisical.configureProjectFolder({
-      token,
+      token: validToken,
       projectId,
       environment,
       projectName,
