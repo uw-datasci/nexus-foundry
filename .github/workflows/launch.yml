@@ -160,7 +160,7 @@ jobs:
 
   # redis_setup:
   #   runs-on: ubuntu-latest
-  #   needs: secrets_setup
+  #   needs: [setup, create_repo, secrets_setup]
   #   steps:
   #     - name: Setup Redis
   #       run: |
@@ -168,7 +168,7 @@ jobs:
 
   # s3_setup:
   #   runs-on: ubuntu-latest
-  #   needs: secrets_setup
+  #   needs: [setup, create_repo, secrets_setup]
   #   steps:
   #     - name: Setup S3
   #       run: |
@@ -176,7 +176,7 @@ jobs:
 
   vercel_setup:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo, secrets_setup]
+    needs: [setup, create_repo, secrets_setup, db_setup]
     steps:
       - name: Setup Vercel
         run: |
