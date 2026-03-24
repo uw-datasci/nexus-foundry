@@ -59,6 +59,11 @@ permissions:
   contents: write
   actions: read
 
+env:
+  INFISICAL_CLIENT_ID: ${{ secrets.INFISICAL_ID }}
+  INFISICAL_CLIENT_SECRET: ${{ secrets.INFISICAL_TOKEN }}
+  INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
+
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -127,9 +132,6 @@ jobs:
         uses: actions/github-script@v8
         env:
           PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
-          INFISICAL_CLIENT_ID: ${{ secrets.INFISICAL_ID }}
-          INFISICAL_CLIENT_SECRET: ${{ secrets.INFISICAL_TOKEN }}
-          INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
         with:
           script: |
             const { main } = require("${{ github.workspace }}/.github/scripts/secrets_setup.js");

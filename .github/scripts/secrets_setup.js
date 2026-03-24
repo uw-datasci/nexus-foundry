@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const INFISICAL_ENVIRONMENT_SLUGS = ["dev", "staging", "prod"];
+const { Infisical } = require("./infisical.js");
 
 class SecretsSetupPreprocessor {
   assertRequiredEnv(keys) {
@@ -28,157 +28,46 @@ class SecretsSetupPreprocessor {
   }
 }
 
-class InfisicalFolderSetup {
-  static API_BASE = "https://us.infisical.com";
-  static ROOT_PATH = "/";
-
-  async login(clientId, clientSecret) {
-    const res = await fetch(
-      `${InfisicalFolderSetup.API_BASE}/api/v1/auth/universal-auth/login`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ clientId, clientSecret }),
-      },
-    );
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(
-        `Infisical Login failed: ${res.status} ${text || res.statusText}`,
-      );
-    }
-
-    const data = await res.json();
-    return data.accessToken;
-  }
+class InfisicalSetup extends Infisical {
+  /** Environments where the Foundry launch workflow creates the project folder. */
+  static ENVIRONMENTS = ["dev", "staging", "prod"];
 
   /**
-   * @param {string} pathnameWithQuery
-   * @param {string} token
-   * @param {{ method?: string; body?: object }} [options]
+   * Logs in and ensures the Foundry project folder exists at workspace root for
+   * each configured environment (secrets_setup GitHub job).
+   *
+   * @param {{
+   *   clientId: string;
+   *   clientSecret: string;
+   *   projectId: string;
+   *   projectName: string;
+   * }} ctx
    */
-  async infisicalRequest(pathnameWithQuery, token, options = {}) {
-    const { method = "GET", body } = options;
-    const url = `${InfisicalFolderSetup.API_BASE}${pathnameWithQuery}`;
+  async runFoundryProjectFolders(ctx) {
+    const { clientId, clientSecret, projectId, projectName } = ctx;
 
-    const res = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    console.log("Infisical: Exchanging Machine Identity for Access Token...");
+    const token = await this.login(clientId, clientSecret);
+    const root = Infisical.ROOT_PATH;
 
-    const text = await res.text();
-    /** @type {unknown} */
-    let parsed = {};
-    if (text) {
-      try {
-        parsed = JSON.parse(text);
-      } catch {
-        parsed = { raw: text };
-      }
-    }
-
-    if (!res.ok) {
-      const err =
-        typeof parsed === "object" &&
-        parsed !== null &&
-        "message" in parsed &&
-        (typeof parsed.message === "string" ||
-          typeof parsed.message === "object")
-          ? JSON.stringify(parsed.message)
-          : text || res.statusText;
-      throw new Error(
-        `Infisical API ${method} ${pathnameWithQuery}: ${res.status} ${err}`,
-      );
-    }
-
-    return parsed;
-  }
-
-  /**
-   * @param {unknown} data
-   * @returns {{ folders: Array<{ name: string }> }}
-   */
-  parseFolderList(data) {
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      "folders" in data &&
-      Array.isArray(data.folders)
-    ) {
-      return { folders: data.folders };
-    }
-    return { folders: [] };
-  }
-
-  /**
-   * @param {string} token
-   * @param {string} projectId
-   * @param {string} environment
-   * @param {string} folderPath
-   */
-  async listFoldersAtPath(token, projectId, environment, folderPath) {
-    const params = new URLSearchParams({
-      projectId,
-      environment,
-      path: folderPath,
-    });
-    const data = await this.infisicalRequest(
-      `/api/v2/folders?${params.toString()}`,
-      token,
-    );
-    return this.parseFolderList(data);
-  }
-
-  /**
-   * @param {string} token
-   * @param {string} projectId
-   * @param {string} environment
-   * @param {string} name
-   * @param {string} parentPath
-   */
-  async createFolder(token, projectId, environment, name, parentPath) {
-    return this.infisicalRequest(`/api/v2/folders`, token, {
-      method: "POST",
-      body: {
+    for (const environment of InfisicalSetup.ENVIRONMENTS) {
+      const { created } = await this.ensureChildFolder(
+        token,
         projectId,
         environment,
-        name,
-        path: parentPath,
-      },
-    });
-  }
-
-  async configureProjectFolder(ctx) {
-    const { token, projectId, environment, projectName } = ctx;
-    const root = InfisicalFolderSetup.ROOT_PATH;
-
-    const { folders } = await this.listFoldersAtPath(
-      token,
-      projectId,
-      environment,
-      root,
-    );
-
-    const exists = folders.some((f) => f.name === projectName);
-    if (exists) {
-      console.log(
-        `Infisical: folder '${projectName}' already exists at path '${root}' (environment: ${environment}).`,
+        root,
+        projectName,
       );
-      return;
+      if (created) {
+        console.log(
+          `Infisical: created folder '${projectName}' at root path '${root}' (environment: ${environment}).`,
+        );
+      } else {
+        console.log(
+          `Infisical: folder '${projectName}' already exists at path '${root}' (environment: ${environment}).`,
+        );
+      }
     }
-
-    await this.createFolder(token, projectId, environment, projectName, root);
-    console.log(
-      `Infisical: created folder '${projectName}' at root path '${root}' (environment: ${environment}).`,
-    );
   }
 }
 
@@ -187,19 +76,13 @@ async function main() {
   const { projectName, clientId, clientSecret, projectId } =
     preprocessor.prepare();
 
-  const infisical = new InfisicalFolderSetup();
-
-  console.log("Infisical: Exchanging Machine Identity for Access Token...");
-  const validToken = await infisical.login(clientId, clientSecret);
-
-  for (const environment of INFISICAL_ENVIRONMENT_SLUGS) {
-    await infisical.configureProjectFolder({
-      token: validToken,
-      projectId,
-      environment,
-      projectName,
-    });
-  }
+  const setup = new InfisicalSetup();
+  await setup.runFoundryProjectFolders({
+    clientId,
+    clientSecret,
+    projectId,
+    projectName,
+  });
 }
 
 module.exports = { main };
