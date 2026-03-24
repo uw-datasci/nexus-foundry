@@ -98,13 +98,22 @@ class NeonSetup {
    * @param {string} branchId
    * @param {string} databaseName
    * @param {string} roleName
+   * @param {boolean} [pooled=true] When true, matches Neon console “Pooled connection” (`-pooler` host).
    */
-  async fetchConnectionUri(projectId, branchId, databaseName, roleName) {
+  async fetchConnectionUri(
+    projectId,
+    branchId,
+    databaseName,
+    roleName,
+    pooled = true,
+  ) {
     const q = new URLSearchParams({
       branch_id: branchId,
       database_name: databaseName,
       role_name: roleName,
     });
+    if (pooled) q.set("pooled", "true");
+
     const data = await this.neonRequest(
       `/projects/${encodeURIComponent(projectId)}/connection_uri?${q.toString()}`,
     );
@@ -128,32 +137,6 @@ class NeonSetup {
     if (!outPath) return;
     const delim = `neon_${name}_${process.pid}_${Date.now()}`;
     fs.appendFileSync(outPath, `${name}<<${delim}\n${value}\n${delim}\n`);
-  }
-
-  /**
-   * @param {unknown} created
-   * @returns {{ connectionUri: string } | null}
-   */
-  firstConnectionUri(created) {
-    if (
-      typeof created !== "object" ||
-      created === null ||
-      !("connection_uris" in created)
-    ) {
-      return null;
-    }
-    const uris = created.connection_uris;
-    if (!Array.isArray(uris) || uris.length === 0) return null;
-    const first = uris[0];
-    if (
-      typeof first === "object" &&
-      first !== null &&
-      "connection_uri" in first &&
-      typeof first.connection_uri === "string"
-    ) {
-      return { connectionUri: first.connection_uri };
-    }
-    return null;
   }
 
   /**
@@ -271,15 +254,12 @@ class NeonSetup {
 
     const { databaseName, roleName } = this.defaultDatabaseAndRole(created);
 
-    let prodUri = this.firstConnectionUri(created)?.connectionUri ?? null;
-    if (!prodUri) {
-      prodUri = await this.fetchConnectionUri(
-        projectId,
-        prodBranchId,
-        databaseName,
-        roleName,
-      );
-    }
+    const prodUri = await this.fetchConnectionUri(
+      projectId,
+      prodBranchId,
+      databaseName,
+      roleName,
+    );
 
     console.log("Neon: creating branch 'dev' from prod.");
 
@@ -313,15 +293,12 @@ class NeonSetup {
 
     await this.waitForProjectOperationsIdle(projectId);
 
-    let devUri = this.firstConnectionUri(devCreated)?.connectionUri ?? null;
-    if (!devUri) {
-      devUri = await this.fetchConnectionUri(
-        projectId,
-        devBranchId,
-        databaseName,
-        roleName,
-      );
-    }
+    const devUri = await this.fetchConnectionUri(
+      projectId,
+      devBranchId,
+      databaseName,
+      roleName,
+    );
 
     this.appendGithubOutput("neon_project_id", projectId);
     this.appendGithubOutput("neon_prod_branch_id", prodBranchId);
@@ -330,8 +307,12 @@ class NeonSetup {
     this.appendGithubOutput("neon_database_url_dev", devUri);
 
     console.log(`Neon: project id ${projectId}`);
-    console.log(`Neon: prod branch ${prodBranchId} — connection URI retrieved.`);
-    console.log(`Neon: dev branch ${devBranchId} — connection URI retrieved.`);
+    console.log(
+      `Neon: prod branch ${prodBranchId} - pooled connection URI retrieved.`,
+    );
+    console.log(
+      `Neon: dev branch ${devBranchId} - pooled connection URI retrieved.`,
+    );
 
     return {
       projectId,

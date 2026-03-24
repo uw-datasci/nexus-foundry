@@ -128,7 +128,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Infisical — project folder at root
+      - name: Setup Infisical secrets folder
         uses: actions/github-script@v8
         env:
           PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
@@ -144,7 +144,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup database
+      - name: Provision database
         uses: actions/github-script@v8
         env:
           DATABASE: ${{ needs.setup.outputs.database }}

@@ -11,19 +11,19 @@ class DatabaseSetup {
 
   supabase(projectName) {
     console.log(
-      `Flow: Supabase — provision / configure Supabase for '${projectName}'.`,
+      `Flow: Supabase - provision / configure Supabase for '${projectName}'.`,
     );
   }
 
   mongodb(projectName) {
     console.log(
-      `Flow: MongoDB — use native driver wiring for '${projectName}'.`,
+      `Flow: MongoDB - use native driver wiring for '${projectName}'.`,
     );
   }
 
   mongoose(projectName) {
     console.log(
-      `Flow: Mongoose — use Mongoose ODM wiring for '${projectName}'.`,
+      `Flow: Mongoose - use Mongoose ODM wiring for '${projectName}'.`,
     );
   }
 
