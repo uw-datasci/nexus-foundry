@@ -2,6 +2,19 @@
 
 const { Infisical } = require("./infisical.js");
 
+/**
+ * @param {string} raw
+ * @returns {string}
+ */
+function normalizeDomain(raw) {
+  if (!raw || typeof raw !== "string") return "";
+  let s = raw.trim().toLowerCase();
+  if (!s) return "";
+  s = s.replace(/^https?:\/\//, "");
+  const host = s.split("/")[0].split(":")[0];
+  return host || "";
+}
+
 class VercelSetupPreprocessor {
   assertRequiredEnv(keys) {
     for (const key of keys) {
@@ -21,6 +34,8 @@ class VercelSetupPreprocessor {
       "INFISICAL_VERCEL_CONNECTION_ID",
     ]);
 
+    const domain = normalizeDomain(process.env.DOMAIN ?? "");
+
     return {
       projectName: process.env.PROJECT_NAME.trim(),
       githubOrg: process.env.GITHUB_ORG.trim(),
@@ -29,6 +44,7 @@ class VercelSetupPreprocessor {
       infisicalProjectId: process.env.INFISICAL_PROJECT_ID.trim(),
       infisicalVercelConnectionId:
         process.env.INFISICAL_VERCEL_CONNECTION_ID.trim(),
+      domain,
     };
   }
 }
@@ -44,6 +60,7 @@ class VercelSetup {
    *   vercelTeamId: string;
    *   infisicalProjectId: string;
    *   infisicalVercelConnectionId: string;
+   *   domain: string;
    * }} ctx
    */
   constructor(ctx) {
@@ -166,6 +183,109 @@ class VercelSetup {
     const id = this.readVercelProjectId(created);
     console.log(`Vercel: created project '${projectName}' (id: ${id}).`);
     return { id, name: projectName };
+  }
+
+  /**
+   * @param {unknown} data
+   * @returns {Array<{ name: string }>}
+   */
+  parseProjectDomains(data) {
+    if (
+      typeof data === "object" &&
+      data !== null &&
+      "domains" in data &&
+      Array.isArray(data.domains)
+    ) {
+      /** @type {Array<{ name: string }>} */
+      const out = [];
+      for (const d of data.domains) {
+        if (
+          typeof d === "object" &&
+          d !== null &&
+          "name" in d &&
+          typeof d.name === "string" &&
+          d.name
+        ) {
+          out.push({ name: d.name });
+        }
+      }
+      return out;
+    }
+    return [];
+  }
+
+  /**
+   * @param {string} projectIdOrName
+   */
+  async listProjectDomains(projectIdOrName) {
+    const q = new URLSearchParams({ teamId: this.ctx.vercelTeamId });
+    const data = await this.vercelRequest(
+      `/v9/projects/${encodeURIComponent(projectIdOrName)}/domains?${q.toString()}`,
+    );
+    return this.parseProjectDomains(data);
+  }
+
+  /**
+   * @param {string} projectIdOrName
+   * @param {string} domainName
+   */
+  async addProjectDomain(projectIdOrName, domainName) {
+    const q = new URLSearchParams({ teamId: this.ctx.vercelTeamId });
+    await this.vercelRequest(
+      `/v10/projects/${encodeURIComponent(projectIdOrName)}/domains?${q.toString()}`,
+      { method: "POST", body: { name: domainName } },
+    );
+  }
+
+  /**
+   * @param {string} projectIdOrName
+   * @param {string} domainName
+   */
+  async removeProjectDomain(projectIdOrName, domainName) {
+    const q = new URLSearchParams({ teamId: this.ctx.vercelTeamId });
+    await this.vercelRequest(
+      `/v9/projects/${encodeURIComponent(projectIdOrName)}/domains/${encodeURIComponent(domainName)}?${q.toString()}`,
+      { method: "DELETE" },
+    );
+  }
+
+  /**
+   * Drops every domain that is not the launch hostname, then adds it if absent.
+   * @param {string} projectIdOrName
+   * @param {string} canonicalDomain normalized hostname
+   */
+  async applyLaunchDomain(projectIdOrName, canonicalDomain) {
+    const targetLc = canonicalDomain.toLowerCase();
+    const attached = await this.listProjectDomains(projectIdOrName);
+
+    for (const d of attached) {
+      if (d.name.toLowerCase() === targetLc) continue;
+      console.log(`Vercel: removing domain '${d.name}'…`);
+      try {
+        await this.removeProjectDomain(projectIdOrName, d.name);
+      } catch (e) {
+        const status =
+          typeof e === "object" &&
+          e !== null &&
+          "status" in e &&
+          typeof e.status === "number"
+            ? e.status
+            : Number.NaN;
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn(
+          `Vercel: could not remove domain '${d.name}' (HTTP ${String(status)}): ${msg}`,
+        );
+      }
+    }
+
+    const after = await this.listProjectDomains(projectIdOrName);
+    const hasTarget = after.some((d) => d.name.toLowerCase() === targetLc);
+    if (hasTarget) {
+      console.log(`Vercel: domain '${canonicalDomain}' is on project.`);
+      return;
+    }
+    console.log(`Vercel: adding domain '${canonicalDomain}'…`);
+    await this.addProjectDomain(projectIdOrName, canonicalDomain);
   }
 
   /**
@@ -303,7 +423,12 @@ class VercelSetup {
   }
 
   async run() {
-    const { id: vercelAppId } = await this.ensureVercelProject();
+    const { id: vercelAppId, name: vercelProjectName } =
+      await this.ensureVercelProject();
+    const { domain } = this.ctx;
+    if (domain) {
+      await this.applyLaunchDomain(vercelProjectName, domain);
+    }
     await this.ensureInfisicalVercelSyncs(vercelAppId);
   }
 }

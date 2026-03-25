@@ -51,6 +51,10 @@ on:
         description: "Project description"
         required: false
         type: string
+      domain:
+        description: "Production hostname for Vercel"
+        required: true
+        type: string
 
   repository_dispatch:
     types: [foundry-launch]
@@ -77,6 +81,7 @@ jobs:
       redis: ${{ steps.payload.outputs.redis }}
       s3: ${{ steps.payload.outputs.s3 }}
       description: ${{ steps.payload.outputs.description }}
+      domain: ${{ steps.payload.outputs.domain }}
     steps:
       - name: Resolve client payload
         id: payload
@@ -91,6 +96,7 @@ jobs:
           echo "redis=${{ inputs.redis }}" >> "$GITHUB_OUTPUT"
           echo "s3=${{ inputs.s3 }}" >> "$GITHUB_OUTPUT"
           echo "description=${{ inputs.description }}" >> "$GITHUB_OUTPUT"
+          echo "domain=${{ inputs.domain || github.event.client_payload.domain }}" >> "$GITHUB_OUTPUT"
 
       - name: Log request (placeholder)
         run: |
@@ -103,6 +109,7 @@ jobs:
           echo "Redis: ${{ steps.payload.outputs.redis }}"
           echo "S3: ${{ steps.payload.outputs.s3 }}"
           echo "Description: ${{ steps.payload.outputs.description }}"
+          echo "Domain: ${{ steps.payload.outputs.domain }}"
 
   create_repo:
     runs-on: ubuntu-latest
@@ -185,6 +192,7 @@ jobs:
         uses: actions/github-script@v8
         env:
           PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
+          DOMAIN: ${{ needs.setup.outputs.domain }}
           GITHUB_ORG: ${{ github.repository_owner }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_TEAM_ID: ${{ secrets.VERCEL_TEAM_ID }}
