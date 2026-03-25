@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { Infisical } = require("./infisical.js");
+const { Infisical } = require("./integrations/infisical.js");
 
 class SecretsSetupPreprocessor {
   assertRequiredEnv(keys) {
