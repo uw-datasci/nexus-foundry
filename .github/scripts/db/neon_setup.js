@@ -2,7 +2,7 @@
 
 const fs = require("node:fs");
 
-const { Infisical } = require("../infisical.js");
+const { Infisical } = require("../integrations/infisical.js");
 
 class NeonSetupPreprocessor {
   assertRequiredEnv(keys) {
