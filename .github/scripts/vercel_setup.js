@@ -271,22 +271,16 @@ class VercelSetup {
 
     const syncs = [
       {
-        name: `${projectName}-vercel-production`,
+        name: `${projectName}-sync-prod`,
         infisicalEnvironment: "prod",
         vercelEnv: "production",
         label: "prod → Vercel production",
       },
       {
-        name: `${projectName}-vercel-preview`,
+        name: `${projectName}-sync-staging`,
         infisicalEnvironment: "staging",
         vercelEnv: "preview",
         label: "staging → Vercel preview",
-      },
-      {
-        name: `${projectName}-vercel-development`,
-        infisicalEnvironment: "staging",
-        vercelEnv: "development",
-        label: "staging → Vercel development",
       },
     ];
 
