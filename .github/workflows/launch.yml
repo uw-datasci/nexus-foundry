@@ -57,7 +57,7 @@ on:
         type: string
 
   repository_dispatch:
-    types: [foundry-launch]
+    types: [ foundry-launch ]
 
 permissions:
   contents: write
@@ -71,6 +71,7 @@ env:
 jobs:
   setup:
     runs-on: ubuntu-latest
+    environment: nexus-queue
     outputs:
       project_name: ${{ steps.payload.outputs.project_name }}
       team_access: ${{ steps.payload.outputs.team_access }}
@@ -143,10 +144,10 @@ jobs:
           script: |
             const { main } = require("${{ github.workspace }}/.github/scripts/secrets_setup.js");
             await main();
-  
+
   db_setup:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo, secrets_setup]
+    needs: [ setup, create_repo, secrets_setup ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -183,7 +184,7 @@ jobs:
 
   vercel_setup:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo, secrets_setup, db_setup]
+    needs: [ setup, create_repo, secrets_setup, db_setup ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -201,7 +202,6 @@ jobs:
           script: |
             const { main } = require("${{ github.workspace }}/.github/scripts/vercel_setup.js");
             await main();
-
   # config
   #   runs-on: ubuntu-latest
   #   needs: vercel_setup
