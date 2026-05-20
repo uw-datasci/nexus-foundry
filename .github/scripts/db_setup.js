@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 const { provisionNeonProject } = require("./db/neon_setup");
-
-const SCENARIO_KEYS = new Set(["neon", "supabase", "mongodb", "mongoose"]);
+const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
 
 class DatabaseSetup {
   async neon(projectName) {
@@ -54,48 +53,10 @@ class DbSetupPreprocessor {
     };
   }
 
-  assertPostgresInputs({ mongoClient, postgresProvider }) {
-    if (mongoClient) {
-      throw new Error("MONGO_CLIENT must be empty when DATABASE is postgres");
-    }
-    if (postgresProvider !== "neon" && postgresProvider !== "supabase") {
-      throw new Error(
-        "When DATABASE is postgres, POSTGRES_PROVIDER must be neon or supabase",
-      );
-    }
-  }
-
-  assertMongoInputs({ postgresProvider, mongoClient }) {
-    if (postgresProvider) {
-      throw new Error(
-        "POSTGRES_PROVIDER must be empty when DATABASE is mongodb",
-      );
-    }
-    if (mongoClient !== "mongodb" && mongoClient !== "mongoose") {
-      throw new Error(
-        "When DATABASE is mongodb, MONGO_CLIENT must be mongodb or mongoose",
-      );
-    }
-  }
-
-  validateDbScenarioInputs(inputs) {
-    const { database, postgresProvider, mongoClient } = inputs;
-
-    if (database === "postgres") {
-      this.assertPostgresInputs({ mongoClient, postgresProvider });
-      return postgresProvider;
-    }
-    if (database === "mongodb") {
-      this.assertMongoInputs({ postgresProvider, mongoClient });
-      return mongoClient;
-    }
-    throw new Error(`DATABASE must be postgres or mongodb, got: ${database}`);
-  }
-
   prepare() {
     this.assertRequiredEnv(["DATABASE", "PROJECT_NAME"]);
     const inputs = this.readDbInputs();
-    const scenario = this.validateDbScenarioInputs(inputs);
+    const scenario = deriveScenario(inputs);
     return { scenario, projectName: inputs.projectName };
   }
 }
