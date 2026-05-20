@@ -237,8 +237,41 @@ jobs:
 
   codegen:
     runs-on: ubuntu-latest
-    needs: config
+    needs: [ setup, config ]
+    timeout-minutes: 30
     steps:
-      - name: Run codegen
-        run: |
-          echo "Agentic job lol"
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Generate plan + scaffold and open PR
+        uses: actions/github-script@v9
+        env:
+          PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
+          PROJECT_TYPE: ${{ needs.setup.outputs.project_type }}
+          DATABASE: ${{ needs.setup.outputs.database }}
+          POSTGRES_PROVIDER: ${{ needs.setup.outputs.postgres_provider }}
+          MONGO_CLIENT: ${{ needs.setup.outputs.mongo_client }}
+          DESCRIPTION: ${{ needs.setup.outputs.description }}
+          GITHUB_ORG: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.FOUNDRY_GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_TOKEN }}
+          COPILOT_PLAN_MODEL: gpt-5.2
+          COPILOT_BUILD_MODEL: gpt-5.2-codex
+          COPILOT_REPAIR_MODEL: claude-haiku-4.5
+        with:
+          script: |
+            const { main } = require("${{ github.workspace }}/.github/scripts/codegen.js");
+            await main();

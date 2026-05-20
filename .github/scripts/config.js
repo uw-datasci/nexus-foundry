@@ -1,33 +1,12 @@
 #!/usr/bin/env node
 
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-const GIT_USER_NAME = "foundry[bot]";
-const GIT_USER_EMAIL = "foundry[bot]@users.noreply.github.com";
-
-const SCENARIO_KEYS = new Set(["neon", "supabase", "mongodb", "mongoose"]);
-
-/**
- * Per-template layout. Static config differs by where each template keeps its
- * app package and `config/` directory.
- *
- * @type {Record<string, { appDir: string; configDir: string; pnpmFilter: string | null }>}
- */
-const TEMPLATES = {
-  "sample-next-app": {
-    appDir: ".",
-    configDir: "config",
-    pnpmFilter: null,
-  },
-  "sample-web-api-monorepo": {
-    appDir: "apps/web",
-    configDir: "apps/web/config",
-    pnpmFilter: "web",
-  },
-};
+const { TEMPLATES } = require("../lib/templates");
+const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
+const { cloneRepo } = require("../lib/git");
 
 const DB_TS_CONTENTS = `import "server-only";
 import { neon } from "@neondatabase/serverless";
@@ -62,38 +41,6 @@ class ConfigPreprocessor {
     };
   }
 
-  assertPostgresInputs({ mongoClient, postgresProvider }) {
-    if (mongoClient) throw new Error("MONGO_CLIENT must be empty when DATABASE is postgres");
-
-    if (postgresProvider !== "neon" && postgresProvider !== "supabase") {
-      throw new Error("When DATABASE is postgres, POSTGRES_PROVIDER must be neon or supabase");
-    }
-  }
-
-  assertMongoInputs({ postgresProvider, mongoClient }) {
-    if (postgresProvider) {
-      throw new Error("POSTGRES_PROVIDER must be empty when DATABASE is mongodb");
-    }
-
-    if (mongoClient !== "mongodb" && mongoClient !== "mongoose") {
-      throw new Error("When DATABASE is mongodb, MONGO_CLIENT must be mongodb or mongoose");
-    }
-  }
-
-  validateDbScenarioInputs(inputs) {
-    const { database, postgresProvider, mongoClient } = inputs;
-
-    if (database === "postgres") {
-      this.assertPostgresInputs({ mongoClient, postgresProvider });
-      return postgresProvider;
-    }
-    if (database === "mongodb") {
-      this.assertMongoInputs({ postgresProvider, mongoClient });
-      return mongoClient;
-    }
-    throw new Error(`DATABASE must be postgres or mongodb, got: ${database}`);
-  }
-
   prepare() {
     this.assertRequiredEnv([
       "PROJECT_NAME",
@@ -103,7 +50,7 @@ class ConfigPreprocessor {
       "GH_TOKEN",
     ]);
     const inputs = this.readConfigInputs();
-    const scenario = this.validateDbScenarioInputs(inputs);
+    const scenario = deriveScenario(inputs);
     return {
       scenario,
       projectName: inputs.projectName,
@@ -115,28 +62,6 @@ class ConfigPreprocessor {
 }
 
 class ConfigSetup {
-  /**
-   * @param {string} org
-   * @param {string} repo
-   * @param {string} token
-   * @returns {string} absolute path to the working copy
-   */
-  cloneRepo(org, repo, token) {
-    const workdir = fs.mkdtempSync(path.join(os.tmpdir(), `foundry-${repo}-`));
-    const remote = `https://x-access-token:${token}@github.com/${org}/${repo}.git`;
-    console.log(`config: cloning ${org}/${repo}…`);
-    execFileSync("git", ["clone", "--depth", "1", remote, workdir], {
-      stdio: "inherit",
-    });
-    execFileSync("git", ["config", "user.name", GIT_USER_NAME], {
-      cwd: workdir,
-    });
-    execFileSync("git", ["config", "user.email", GIT_USER_EMAIL], {
-      cwd: workdir,
-    });
-    return workdir;
-  }
-
   /**
    * Stages only the intended files (never the generated lockfile or node_modules),
    * commits, and pushes to main. No-ops if nothing changed.
@@ -229,7 +154,7 @@ class ConfigSetup {
       return;
     }
 
-    const workdir = this.cloneRepo(org, projectName, token);
+    const workdir = cloneRepo(org, projectName, token);
     await this[scenario](workdir, template);
     this.commitAndPush(workdir, template);
   }
