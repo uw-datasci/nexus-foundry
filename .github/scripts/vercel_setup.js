@@ -43,8 +43,7 @@ class VercelSetupPreprocessor {
       vercelToken: process.env.VERCEL_TOKEN.trim(),
       vercelTeamId: process.env.VERCEL_TEAM_ID.trim(),
       infisicalProjectId: process.env.INFISICAL_PROJECT_ID.trim(),
-      infisicalVercelConnectionId:
-        process.env.INFISICAL_VERCEL_CONNECTION_ID.trim(),
+      infisicalVercelConnectionId: process.env.INFISICAL_VERCEL_CONNECTION_ID.trim(),
       domain,
     };
   }
@@ -124,9 +123,7 @@ class VercelSetup {
       spec.infisicalProjectId,
     );
     if (existing.some((s) => s.name === spec.name)) {
-      console.log(
-        `Infisical: Vercel sync '${spec.name}' already exists, skip.`,
-      );
+      console.log(`Infisical: Vercel sync '${spec.name}' already exists, skip.`);
       return;
     }
 
@@ -154,16 +151,11 @@ class VercelSetup {
    * @param {string} vercelAppId
    */
   async ensureInfisicalVercelSyncs(vercelAppId) {
-    const {
-      projectName,
-      vercelTeamId,
-      infisicalProjectId,
-      infisicalVercelConnectionId,
-    } = this.ctx;
+    const { projectName, vercelTeamId, infisicalProjectId, infisicalVercelConnectionId } =
+      this.ctx;
 
-    const secretPath = projectName.startsWith("/")
-      ? projectName
-      : `/${projectName}`;
+    const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
+    const secretPath = `${base}/web`;
 
     const infisical = new Infisical();
     const token = await infisical.login(
@@ -206,8 +198,10 @@ class VercelSetup {
 
   async run() {
     const { projectName, githubOrg, domain } = this.ctx;
-    const { id: vercelAppId, name: vercelProjectName } =
-      await this.vercel.ensureVercelProject(projectName, githubOrg);
+    const { id: vercelAppId, name: vercelProjectName } = await this.vercel.ensureVercelProject(
+      projectName,
+      githubOrg,
+    );
     if (domain) {
       await this.vercel.applyLaunchDomain(vercelProjectName, domain);
     }

@@ -159,12 +159,18 @@ class RenderSetup {
   }
 
   /**
+   * Logs in once, stores the deployed API URL in the project's api folder
+   * (`/{projectName}/api`) across all environments, then ensures prod + staging
+   * Infisical → Render secret syncs from that same folder.
+   *
    * @param {string} serviceId
+   * @param {string | null} apiUrl
    */
-  async ensureInfisicalRenderSyncs(serviceId) {
+  async setupInfisicalRender(serviceId, apiUrl) {
     const { projectName, infisicalProjectId, infisicalRenderConnectionId } = this.ctx;
 
-    const secretPath = projectName.startsWith("/") ? projectName : `/${projectName}`;
+    const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
+    const secretPath = `${base}/api`;
 
     const infisical = new Infisical();
     const token = await infisical.login(
@@ -172,30 +178,34 @@ class RenderSetup {
       process.env.INFISICAL_CLIENT_SECRET.trim(),
     );
 
-    const syncs = [
-      {
-        name: `${projectName}-render-sync-prod`,
-        infisicalEnvironment: "prod",
-        label: "prod → Render",
-      },
-      {
-        name: `${projectName}-render-sync-staging`,
-        infisicalEnvironment: "staging",
-        label: "staging → Render",
-      },
-    ];
-
-    for (const s of syncs) {
-      console.log(`Infisical: ensuring Render sync (${s.label})…`);
-      await this.ensureRenderSecretSync(infisical, token, {
-        name: s.name,
-        infisicalProjectId,
-        connectionId: infisicalRenderConnectionId,
-        infisicalEnvironment: s.infisicalEnvironment,
-        secretPath,
-        serviceId,
-      });
+    if (apiUrl) {
+      for (const environment of ["dev", "staging", "prod"]) {
+        await infisical.upsertSecret(
+          token,
+          infisicalProjectId,
+          environment,
+          secretPath,
+          "API_URL",
+          apiUrl,
+        );
+        console.log(`Infisical: set API_URL for '${environment}' at '${secretPath}'.`);
+      }
+    } else {
+      console.warn("Render: service URL not available yet; skipping API_URL secret.");
     }
+
+    // One free Render service runs production, so only the prod environment is
+    // synced to it. (Add a staging sync here if a separate staging service is
+    // ever provisioned.)
+    console.log("Infisical: ensuring Render sync (prod → Render)…");
+    await this.ensureRenderSecretSync(infisical, token, {
+      name: `${projectName}-render-sync-prod`,
+      infisicalProjectId,
+      connectionId: infisicalRenderConnectionId,
+      infisicalEnvironment: "prod",
+      secretPath,
+      serviceId,
+    });
   }
 
   async run() {
@@ -229,7 +239,7 @@ class RenderSetup {
       authToken: ghcrToken,
     });
 
-    const serviceId = await this.render.ensureWebService({
+    const { id: serviceId, url: apiUrl } = await this.render.ensureWebService({
       name: projectName,
       ownerId: renderOwnerId,
       environmentId,
@@ -241,7 +251,7 @@ class RenderSetup {
     this.setRepoSecret("RENDER_SERVICE_ID", serviceId);
     this.setRepoSecret("RENDER_API_KEY", renderApiKey);
 
-    await this.ensureInfisicalRenderSyncs(serviceId);
+    await this.setupInfisicalRender(serviceId, apiUrl);
   }
 }
 

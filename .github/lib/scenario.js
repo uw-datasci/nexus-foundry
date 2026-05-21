@@ -12,9 +12,7 @@ function assertPostgresInputs({ mongoClient, postgresProvider }) {
     throw new Error("MONGO_CLIENT must be empty when DATABASE is postgres");
   }
   if (postgresProvider !== "neon" && postgresProvider !== "supabase") {
-    throw new Error(
-      "When DATABASE is postgres, POSTGRES_PROVIDER must be neon or supabase",
-    );
+    throw new Error("When DATABASE is postgres, POSTGRES_PROVIDER must be neon or supabase");
   }
 }
 
@@ -23,9 +21,7 @@ function assertMongoInputs({ postgresProvider, mongoClient }) {
     throw new Error("POSTGRES_PROVIDER must be empty when DATABASE is mongodb");
   }
   if (mongoClient !== "mongodb" && mongoClient !== "mongoose") {
-    throw new Error(
-      "When DATABASE is mongodb, MONGO_CLIENT must be mongodb or mongoose",
-    );
+    throw new Error("When DATABASE is mongodb, MONGO_CLIENT must be mongodb or mongoose");
   }
 }
 

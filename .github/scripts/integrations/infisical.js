@@ -5,22 +5,17 @@ class Infisical {
   static ROOT_PATH = "/";
 
   async login(clientId, clientSecret) {
-    const res = await fetch(
-      `${Infisical.API_BASE}/api/v1/auth/universal-auth/login`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ clientId, clientSecret }),
+    const res = await fetch(`${Infisical.API_BASE}/api/v1/auth/universal-auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ clientId, clientSecret }),
+    });
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(
-        `Infisical Login failed: ${res.status} ${text || res.statusText}`,
-      );
+      throw new Error(`Infisical Login failed: ${res.status} ${text || res.statusText}`);
     }
 
     const data = await res.json();
@@ -62,13 +57,10 @@ class Infisical {
         typeof parsed === "object" &&
         parsed !== null &&
         "message" in parsed &&
-        (typeof parsed.message === "string" ||
-          typeof parsed.message === "object")
+        (typeof parsed.message === "string" || typeof parsed.message === "object")
           ? JSON.stringify(parsed.message)
           : text || res.statusText;
-      throw new Error(
-        `Infisical API ${method} ${pathnameWithQuery}: ${res.status} ${err}`,
-      );
+      throw new Error(`Infisical API ${method} ${pathnameWithQuery}: ${res.status} ${err}`);
     }
 
     return parsed;
@@ -102,10 +94,7 @@ class Infisical {
       environment,
       path: folderPath,
     });
-    const data = await this.infisicalRequest(
-      `/api/v2/folders?${params.toString()}`,
-      token,
-    );
+    const data = await this.infisicalRequest(`/api/v2/folders?${params.toString()}`, token);
     return this.parseFolderList(data);
   }
 
@@ -138,32 +127,15 @@ class Infisical {
    * @param {string} folderName
    * @returns {Promise<{ created: boolean }>}
    */
-  async ensureChildFolder(
-    token,
-    projectId,
-    environment,
-    parentPath,
-    folderName,
-  ) {
-    const { folders } = await this.listFoldersAtPath(
-      token,
-      projectId,
-      environment,
-      parentPath,
-    );
+  async ensureChildFolder(token, projectId, environment, parentPath, folderName) {
+    const { folders } = await this.listFoldersAtPath(token, projectId, environment, parentPath);
 
     const exists = folders.some((f) => f.name === folderName);
     if (exists) {
       return { created: false };
     }
 
-    await this.createFolder(
-      token,
-      projectId,
-      environment,
-      folderName,
-      parentPath,
-    );
+    await this.createFolder(token, projectId, environment, folderName, parentPath);
     return { created: true };
   }
 
@@ -181,10 +153,7 @@ class Infisical {
       secretPath,
       viewSecretValue: "false",
     });
-    const data = await this.infisicalRequest(
-      `/api/v4/secrets?${params.toString()}`,
-      token,
-    );
+    const data = await this.infisicalRequest(`/api/v4/secrets?${params.toString()}`, token);
     if (
       typeof data === "object" &&
       data !== null &&
@@ -204,26 +173,11 @@ class Infisical {
    * @param {string} secretName
    * @param {string} secretValue
    */
-  async upsertSecret(
-    token,
-    projectId,
-    environment,
-    secretPath,
-    secretName,
-    secretValue,
-  ) {
-    const secrets = await this.listSecretsAtPath(
-      token,
-      projectId,
-      environment,
-      secretPath,
-    );
+  async upsertSecret(token, projectId, environment, secretPath, secretName, secretValue) {
+    const secrets = await this.listSecretsAtPath(token, projectId, environment, secretPath);
     const exists = secrets.some(
       (s) =>
-        typeof s === "object" &&
-        s !== null &&
-        "secretKey" in s &&
-        s.secretKey === secretName,
+        typeof s === "object" && s !== null && "secretKey" in s && s.secretKey === secretName,
     );
     const path = `/api/v4/secrets/${encodeURIComponent(secretName)}`;
     const body = { projectId, environment, secretPath, secretValue };
@@ -235,9 +189,10 @@ class Infisical {
   }
 
   /**
-   * Writes Neon branch URIs as DATABASE_URL under `/{projectName}` (the folder
-   * created by the secrets setup job). Dev branch URI → dev and staging; prod
-   * branch URI → prod.
+   * Writes Neon branch URIs as DATABASE_URL under the app's secret folder
+   * `/{projectName}/{appFolder}` (created by the secrets setup job). Dev branch
+   * URI → dev and staging; prod branch URI → prod. Falls back to
+   * `/{projectName}` when `appFolder` is omitted.
    *
    * No-ops when Infisical machine-identity fields are unset.
    *
@@ -246,6 +201,7 @@ class Infisical {
    *   clientSecret?: string;
    *   projectId?: string;
    *   projectName: string;
+   *   appFolder?: string;
    *   devConnectionUri: string;
    *   prodConnectionUri: string;
    * }} opts
@@ -261,10 +217,9 @@ class Infisical {
       return;
     }
 
-    const { projectName, devConnectionUri, prodConnectionUri } = opts;
-    const secretPath = projectName.startsWith("/")
-      ? projectName
-      : `/${projectName}`;
+    const { projectName, appFolder, devConnectionUri, prodConnectionUri } = opts;
+    const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
+    const secretPath = appFolder ? `${base}/${appFolder}` : base;
 
     const infisical = new Infisical();
     const token = await infisical.login(clientId, clientSecret);
@@ -291,9 +246,7 @@ class Infisical {
       "DATABASE_URL",
       prodConnectionUri,
     );
-    console.log(
-      `Infisical: set DATABASE_URL for environment 'prod' at path '${secretPath}'.`,
-    );
+    console.log(`Infisical: set DATABASE_URL for environment 'prod' at path '${secretPath}'.`);
   }
 }
 

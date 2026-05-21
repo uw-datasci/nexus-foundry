@@ -50,9 +50,7 @@ class VercelClient {
         const m = parsed.error.message;
         err = typeof m === "string" ? m : JSON.stringify(m);
       }
-      const apiError = new Error(
-        `Vercel API ${method} ${pathWithQuery}: ${res.status} ${err}`,
-      );
+      const apiError = new Error(`Vercel API ${method} ${pathWithQuery}: ${res.status} ${err}`);
       Object.assign(apiError, { status: res.status, body: parsed });
       throw apiError;
     }
@@ -98,16 +96,11 @@ class VercelClient {
 
     try {
       const id = await this.getVercelProjectByName(projectName);
-      console.log(
-        `Vercel: project '${projectName}' already exists (id: ${id}), reusing.`,
-      );
+      console.log(`Vercel: project '${projectName}' already exists (id: ${id}), reusing.`);
       return { id, name: projectName };
     } catch (e) {
       const status =
-        typeof e === "object" &&
-        e !== null &&
-        "status" in e &&
-        typeof e.status === "number"
+        typeof e === "object" && e !== null && "status" in e && typeof e.status === "number"
           ? e.status
           : Number.NaN;
       if (status !== 404) {
@@ -212,10 +205,7 @@ class VercelClient {
         await this.removeProjectDomain(projectIdOrName, d.name);
       } catch (e) {
         const status =
-          typeof e === "object" &&
-          e !== null &&
-          "status" in e &&
-          typeof e.status === "number"
+          typeof e === "object" && e !== null && "status" in e && typeof e.status === "number"
             ? e.status
             : Number.NaN;
         const msg = e instanceof Error ? e.message : String(e);

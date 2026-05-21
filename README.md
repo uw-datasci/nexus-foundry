@@ -71,10 +71,10 @@ flowchart TB
 | Stage             | Script             | Purpose                                                                        |
 | ----------------- | ------------------ | ------------------------------------------------------------------------------ |
 | **create_repo**   | `create_repo.js`   | Generate a new repo from a GitHub template; grant team access                  |
-| **secrets_setup** | `secrets_setup.js` | Create Infisical folders (`dev`, `staging`, `prod`) for the project            |
+| **secrets_setup** | `secrets_setup.js` | Create Infisical folders per environment (`dev`/`staging`/`prod`): `/{projectName}` plus per-app subfolders (`/web`, and `/api` for API templates) |
 | **db_setup**      | `db_setup.js`      | Provision database (Neon fully implemented; others stubbed)                    |
 | **vercel_setup**  | `vercel_setup.js`  | Create Vercel project, optional custom domain, Infisical → Vercel secret syncs |
-| **render_setup**  | `render_setup.js`  | API templates only: create a free Render web service (image from GHCR) in your Render Project, write `RENDER_SERVICE_ID`/`RENDER_API_KEY` repo secrets, Infisical → Render secret syncs |
+| **render_setup**  | `render_setup.js`  | API templates only: create a free Render web service (image from GHCR) in your Render Project, write `RENDER_SERVICE_ID`/`RENDER_API_KEY` repo secrets, store the service `API_URL` in `/{projectName}/api`, and Infisical → Render secret syncs from `/{projectName}/api` |
 | **config**        | `config.js`        | Clone the new repo, apply static DB wiring (Neon), commit to `main`            |
 | **codegen**       | `codegen.js`       | Plan + scaffold via GitHub Copilot CLI; open PR (draft if verify fails)        |
 

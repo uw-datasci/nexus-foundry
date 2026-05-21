@@ -162,7 +162,7 @@ class RenderClient {
 
   /**
    * @param {string} name
-   * @returns {Promise<string | null>} service id (srv-…) or null when absent
+   * @returns {Promise<Record<string, unknown> | null>} service object or null when absent
    */
   async getServiceByName(name) {
     const q = new URLSearchParams({
@@ -172,8 +172,24 @@ class RenderClient {
     });
     const data = await this.renderRequest(`/v1/services?${q.toString()}`);
     const services = this.unwrapList(data, "service");
-    const match = services.find((s) => s.name === name) ?? services[0];
-    return match ? this.readId(match) : null;
+    return services.find((s) => s.name === name) ?? services[0] ?? null;
+  }
+
+  /**
+   * Reads the public service URL (e.g. https://my-api.onrender.com) off a
+   * service object.
+   *
+   * @param {unknown} service
+   * @returns {string | null}
+   */
+  readServiceUrl(service) {
+    if (typeof service !== "object" || service === null) return null;
+    const sd = "serviceDetails" in service ? service.serviceDetails : null;
+    if (typeof sd === "object" && sd !== null && "url" in sd && typeof sd.url === "string") {
+      return sd.url;
+    }
+    if ("url" in service && typeof service.url === "string") return service.url;
+    return null;
   }
 
   /**
@@ -189,15 +205,18 @@ class RenderClient {
    *   plan?: string;
    *   region?: string;
    * }} spec
-   * @returns {Promise<string>} service id (srv-…)
+   * @returns {Promise<{ id: string; url: string | null }>} service id (srv-…) and public URL
    */
   async ensureWebService(spec) {
-    const existingId = await this.getServiceByName(spec.name);
-    if (existingId) {
-      console.log(
-        `Render: web service '${spec.name}' already exists (id: ${existingId}), reusing.`,
-      );
-      return existingId;
+    const existing = await this.getServiceByName(spec.name);
+    if (existing) {
+      const existingId = this.readId(existing);
+      if (existingId) {
+        console.log(
+          `Render: web service '${spec.name}' already exists (id: ${existingId}), reusing.`,
+        );
+        return { id: existingId, url: this.readServiceUrl(existing) };
+      }
     }
 
     const body = {
@@ -239,7 +258,7 @@ class RenderClient {
     console.log(
       `Render: created web service '${spec.name}' (id: ${id}) from '${spec.imagePath}'.`,
     );
-    return id;
+    return { id, url: this.readServiceUrl(service) };
   }
 }
 
