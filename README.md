@@ -26,6 +26,7 @@ flowchart TB
     direction TB
     db_setup["Provision database"]
     vercel_setup["Vercel project + domain + secret sync"]
+    render_setup["Render web service + secret sync (API templates)"]
     db_setup --> vercel_setup
   end
 
@@ -44,6 +45,7 @@ flowchart TB
   setup --> secrets_setup
   create_repo --> db_setup
   secrets_setup --> db_setup
+  secrets_setup --> render_setup
   db_setup --> vercel_setup
   vercel_setup --> config
   config --> codegen
@@ -59,7 +61,7 @@ flowchart TB
   class START,DONE trigger
   class setup resolve
   class create_repo,secrets_setup bootstrap
-  class db_setup,vercel_setup platform
+  class db_setup,vercel_setup,render_setup platform
   class config repo
   class codegen ai
 
@@ -72,6 +74,7 @@ flowchart TB
 | **secrets_setup** | `secrets_setup.js` | Create Infisical folders (`dev`, `staging`, `prod`) for the project            |
 | **db_setup**      | `db_setup.js`      | Provision database (Neon fully implemented; others stubbed)                    |
 | **vercel_setup**  | `vercel_setup.js`  | Create Vercel project, optional custom domain, Infisical → Vercel secret syncs |
+| **render_setup**  | `render_setup.js`  | API templates only: create a free Render web service (image from GHCR) in your Render Project, write `RENDER_SERVICE_ID`/`RENDER_API_KEY` repo secrets, Infisical → Render secret syncs |
 | **config**        | `config.js`        | Clone the new repo, apply static DB wiring (Neon), commit to `main`            |
 | **codegen**       | `codegen.js`       | Plan + scaffold via GitHub Copilot CLI; open PR (draft if verify fails)        |
 
@@ -116,6 +119,11 @@ Configure these on the Foundry repo (and use the `nexus-queue` environment for t
 | `INFISICAL_VERCEL_CONNECTION_ID`                            | Infisical → Vercel secret syncs                   |
 | `VERCEL_TOKEN` / `VERCEL_TEAM_ID`                           | Vercel project + domain                           |
 | `NEON_API_KEY`                                              | Neon provisioning (`NEON_ORG_ID` optional)        |
+| `RENDER_API_KEY`                                            | Render API; also copied to API repos for deploys  |
+| `RENDER_OWNER_ID`                                           | Render workspace/owner id (`tea-…` / `usr-…`)     |
+| `RENDER_PROJECT_ID`                                         | Existing Render Project (`prj-…`); services nest in its environment |
+| `GHCR_PULL_USERNAME` / `GHCR_PULL_TOKEN`                    | GitHub user + PAT (`read:packages`) for Render's GHCR registry credential |
+| `INFISICAL_RENDER_CONNECTION_ID`                            | Infisical → Render secret syncs                   |
 
 The workflow also expects Infisical credentials as `INFISICAL_CLIENT_ID` and `INFISICAL_CLIENT_SECRET` (mapped from `INFISICAL_ID` and `INFISICAL_TOKEN`).
 
@@ -153,7 +161,7 @@ Codegen and config jobs need **pnpm**, **Node 24**, and the **Copilot CLI** (`np
 
 ## Implementation status
 
-- **Done:** repo creation, Infisical folders, Neon + Infisical `DATABASE_URL`, Vercel project + domain + secret syncs, Neon static config, Copilot plan/scaffold PR flow
+- **Done:** repo creation, Infisical folders, Neon + Infisical `DATABASE_URL`, Vercel project + domain + secret syncs, Render web service for API templates + secret syncs, Neon static config, Copilot plan/scaffold PR flow
 - **Stub / planned:** Supabase, MongoDB/Mongoose, Redis, S3
 
 ---
