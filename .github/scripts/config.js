@@ -22,6 +22,52 @@ import { serverConfig } from "./server";
 export const sql = neon(serverConfig.databaseUrl);
 `;
 
+const R2_WEB_CONTENTS = `import "server-only";
+import { S3Client } from "@aws-sdk/client-s3";
+
+import { serverConfig } from "./server";
+
+/**
+ * Cloudflare R2 client (S3-compatible).
+ *
+ * Backed by the \`R2_*\` env vars (see ./server). Use from Server Components,
+ * Route Handlers, Server Actions, and server/ code.
+ */
+export const r2 = new S3Client({
+  region: "auto",
+  endpoint: \`https://\${serverConfig.r2AccountId}.r2.cloudflarestorage.com\`,
+  credentials: {
+    accessKeyId: serverConfig.r2AccessKeyId,
+    secretAccessKey: serverConfig.r2SecretAccessKey,
+  },
+});
+`;
+
+const R2_API_PLUGIN_CONTENTS = `import { S3Client } from "@aws-sdk/client-s3"
+import type { FastifyInstance } from "fastify"
+
+/**
+ * Cloudflare R2 client (S3-compatible) exposed as \`fastify.r2\`.
+ *
+ * Reads the validated \`R2_*\` values from \`fastify.config\` (see ./env) and
+ * decorates the instance so routes can call \`fastify.r2.send(...)\`.
+ */
+export async function registerR2(fastify: FastifyInstance) {
+  const c = fastify.config
+  const client = new S3Client({
+    region: "auto",
+    endpoint: \`https://\${c.R2_ACCOUNT_ID}.r2.cloudflarestorage.com\`,
+    credentials: {
+      accessKeyId: c.R2_ACCESS_KEY_ID,
+      secretAccessKey: c.R2_SECRET_ACCESS_KEY,
+    },
+  })
+
+  fastify.decorate("r2", client)
+  fastify.addHook("onClose", () => client.destroy())
+}
+`;
+
 class ConfigPreprocessor {
   assertRequiredEnv(keys) {
     for (const key of keys) {
@@ -38,6 +84,7 @@ class ConfigPreprocessor {
       database: process.env.DATABASE.trim().toLowerCase(),
       postgresProvider: (process.env.POSTGRES_PROVIDER ?? "").trim().toLowerCase(),
       mongoClient: (process.env.MONGO_CLIENT ?? "").trim().toLowerCase(),
+      s3: (process.env.S3 ?? "").trim().toLowerCase() === "true",
     };
   }
 
@@ -57,6 +104,7 @@ class ConfigPreprocessor {
       projectType: inputs.projectType,
       org: inputs.org,
       token: inputs.token,
+      s3: inputs.s3,
     };
   }
 }
@@ -67,15 +115,35 @@ class ConfigSetup {
    * commits, and pushes to main. No-ops if nothing changed.
    *
    * @param {string} workdir
-   * @param {{ appDir: string; configDir: string }} template
+   * @param {{ appDir: string; configDir: string; hasApi?: boolean; apiDir?: string }} template
+   * @param {{ s3?: boolean }} [opts]
    */
-  commitAndPush(workdir, template) {
+  commitAndPush(workdir, template, opts = {}) {
     const filePaths = [
       path.posix.join(template.configDir, "server.ts"),
       path.posix.join(template.configDir, "db.ts"),
       path.posix.join(template.appDir, "package.json"),
     ];
-    execFileSync("git", ["add", "--", ...filePaths], { cwd: workdir });
+
+    if (opts.s3) {
+      if (template.hasApi && template.apiDir) {
+        const pluginsDir = path.posix.join(template.apiDir, "src", "plugins");
+        filePaths.push(
+          path.posix.join(pluginsDir, "r2.ts"),
+          path.posix.join(pluginsDir, "env.ts"),
+          path.posix.join(pluginsDir, "index.ts"),
+          path.posix.join(template.apiDir, "src", "fastify-env.d.ts"),
+          path.posix.join(template.apiDir, ".env.example"),
+          path.posix.join(template.apiDir, "package.json"),
+        );
+      } else {
+        filePaths.push(path.posix.join(template.configDir, "r2.ts"));
+      }
+    }
+
+    // Stage only files that exist (e.g. db.ts is absent for non-neon scenarios).
+    const existing = filePaths.filter((p) => fs.existsSync(path.join(workdir, p)));
+    execFileSync("git", ["add", "--", ...existing], { cwd: workdir });
 
     const staged = execFileSync("git", ["diff", "--cached", "--name-only"], {
       cwd: workdir,
@@ -86,7 +154,7 @@ class ConfigSetup {
       return;
     }
 
-    execFileSync("git", ["commit", "-m", "chore: configure neon postgres (nexus-foundry)"], {
+    execFileSync("git", ["commit", "-m", "chore: apply foundry configuration"], {
       cwd: workdir,
       stdio: "inherit",
     });
@@ -127,6 +195,182 @@ class ConfigSetup {
     console.log(`config: wrote ${template.configDir}/db.ts.`);
   }
 
+  /**
+   * Reads a file, applies a single find→replace, and writes it back. Idempotent:
+   * skips when `presentMarker` is already in the file. Throws when `find` is
+   * absent, so template drift fails loudly instead of producing broken output.
+   *
+   * @param {string} absPath
+   * @param {string} label
+   * @param {string} find
+   * @param {string} replace
+   * @param {string} presentMarker
+   */
+  applyReplace(absPath, label, find, replace, presentMarker) {
+    const original = fs.readFileSync(absPath, "utf8");
+    if (original.includes(presentMarker)) {
+      console.log(`config: ${label} already present (skip).`);
+      return;
+    }
+    if (!original.includes(find)) {
+      throw new Error(`config: could not find anchor for "${label}" in ${absPath}`);
+    }
+    fs.writeFileSync(absPath, original.replace(find, replace));
+    console.log(`config: ${label}.`);
+  }
+
+  /**
+   * @param {string} workdir
+   * @param {string | null | undefined} filter
+   */
+  addAwsSdk(workdir, filter) {
+    const args = ["add", "@aws-sdk/client-s3"];
+    if (filter) args.push("--filter", filter);
+    execFileSync("pnpm", args, { cwd: workdir, stdio: "inherit" });
+    console.log("config: added @aws-sdk/client-s3.");
+  }
+
+  /**
+   * Generates the Cloudflare R2 client for the template: a Fastify plugin in the
+   * API app, otherwise a server-config client in the web app.
+   *
+   * @param {string} workdir
+   * @param {{ hasApi?: boolean; apiDir?: string; configDir: string; pnpmFilter: string | null; apiPnpmFilter?: string | null }} template
+   */
+  s3(workdir, template) {
+    if (template.hasApi && template.apiDir) {
+      this.s3Api(workdir, template);
+    } else {
+      this.s3Web(workdir, template);
+    }
+  }
+
+  /**
+   * Web (Next.js) R2 client: adds `R2_*` fields to `serverConfig` and writes
+   * `{configDir}/r2.ts`, mirroring the neon/db.ts flow.
+   *
+   * @param {string} workdir
+   * @param {{ configDir: string; pnpmFilter: string | null }} template
+   */
+  s3Web(workdir, template) {
+    const serverPath = path.join(workdir, template.configDir, "server.ts");
+    this.applyReplace(
+      serverPath,
+      "added R2_* fields to serverConfig",
+      "export const serverConfig = {\n",
+      "export const serverConfig = {\n" +
+        '  r2AccountId: requireEnv("R2_ACCOUNT_ID"),\n' +
+        '  r2AccessKeyId: requireEnv("R2_ACCESS_KEY_ID"),\n' +
+        '  r2SecretAccessKey: requireEnv("R2_SECRET_ACCESS_KEY"),\n' +
+        '  r2BucketName: requireEnv("R2_BUCKET_NAME"),\n',
+      "r2AccountId:",
+    );
+
+    this.addAwsSdk(workdir, template.pnpmFilter);
+
+    const r2Path = path.join(workdir, template.configDir, "r2.ts");
+    fs.writeFileSync(r2Path, R2_WEB_CONTENTS);
+    console.log(`config: wrote ${template.configDir}/r2.ts.`);
+  }
+
+  /**
+   * API (Fastify) R2 client: writes a plugin, registers it in the fixed order,
+   * extends the `@fastify/env` schema and the `fastify.config` / `fastify.r2`
+   * typings, and adds the AWS SDK dependency to the API package.
+   *
+   * @param {string} workdir
+   * @param {{ apiDir: string; apiPnpmFilter?: string | null }} template
+   */
+  s3Api(workdir, template) {
+    const apiDir = template.apiDir;
+    const pluginsDir = path.posix.join(apiDir, "src", "plugins");
+
+    // 1. The plugin itself.
+    fs.writeFileSync(path.join(workdir, pluginsDir, "r2.ts"), R2_API_PLUGIN_CONTENTS);
+    console.log(`config: wrote ${pluginsDir}/r2.ts.`);
+
+    // 2. Validate the R2 vars through @fastify/env.
+    const envPath = path.join(workdir, pluginsDir, "env.ts");
+    this.applyReplace(
+      envPath,
+      "added R2_* to env schema properties",
+      '    CORS_ORIGIN: { type: "string", default: "" },\n',
+      '    CORS_ORIGIN: { type: "string", default: "" },\n' +
+        '    R2_ACCOUNT_ID: { type: "string" },\n' +
+        '    R2_ACCESS_KEY_ID: { type: "string" },\n' +
+        '    R2_SECRET_ACCESS_KEY: { type: "string" },\n' +
+        '    R2_BUCKET_NAME: { type: "string" },\n',
+      "R2_ACCOUNT_ID:",
+    );
+    this.applyReplace(
+      envPath,
+      "marked R2_* required in env schema",
+      "  },\n} as const",
+      '  },\n  required: ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME"],\n} as const',
+      "required:",
+    );
+
+    // 3. Types: fastify.config keys + the fastify.r2 decorator.
+    const dtsPath = path.join(workdir, apiDir, "src", "fastify-env.d.ts");
+    this.applyReplace(
+      dtsPath,
+      "imported S3Client type",
+      'import "fastify"\n',
+      'import "fastify"\nimport type { S3Client } from "@aws-sdk/client-s3"\n',
+      "S3Client",
+    );
+    this.applyReplace(
+      dtsPath,
+      "added R2_* config keys to typings",
+      "      CORS_ORIGIN: string\n",
+      "      CORS_ORIGIN: string\n" +
+        "      R2_ACCOUNT_ID: string\n" +
+        "      R2_ACCESS_KEY_ID: string\n" +
+        "      R2_SECRET_ACCESS_KEY: string\n" +
+        "      R2_BUCKET_NAME: string\n",
+      "R2_ACCOUNT_ID: string",
+    );
+    this.applyReplace(
+      dtsPath,
+      "added r2 decorator typing",
+      "    }\n  }\n}",
+      "    }\n    r2: S3Client\n  }\n}",
+      "r2: S3Client",
+    );
+
+    // 4. Register in the fixed plugin order (env runs first, so config is set).
+    const indexPath = path.join(workdir, pluginsDir, "index.ts");
+    this.applyReplace(
+      indexPath,
+      "imported registerR2",
+      'import { registerEnv } from "./env"\n',
+      'import { registerEnv } from "./env"\nimport { registerR2 } from "./r2"\n',
+      'from "./r2"',
+    );
+    this.applyReplace(
+      indexPath,
+      "registered R2 plugin",
+      "  // Insert new plugins here\n",
+      "  await registerR2(fastify)\n\n  // Insert new plugins here\n",
+      "registerR2(fastify)",
+    );
+
+    // 5. Document the vars (best-effort) and add the dependency.
+    const envExamplePath = path.join(workdir, apiDir, ".env.example");
+    if (fs.existsSync(envExamplePath)) {
+      const example = fs.readFileSync(envExamplePath, "utf8");
+      if (!example.includes("R2_ACCOUNT_ID")) {
+        const block =
+          "\n# Cloudflare R2 (S3-compatible) — provisioned by the foundry s3 setup job\n" +
+          "R2_ACCOUNT_ID=\nR2_ACCESS_KEY_ID=\nR2_SECRET_ACCESS_KEY=\nR2_BUCKET_NAME=\n";
+        fs.writeFileSync(envExamplePath, example.endsWith("\n") ? example + block : `${example}\n${block}`);
+        console.log(`config: appended R2_* to ${apiDir}/.env.example.`);
+      }
+    }
+
+    this.addAwsSdk(workdir, template.apiPnpmFilter ?? "api");
+  }
+
   supabase(_workdir, template) {
     console.log(
       `Flow: Supabase - static config for '${template.configDir}' not yet implemented.`,
@@ -145,7 +389,7 @@ class ConfigSetup {
     );
   }
 
-  async run(scenario, projectName, projectType, org, token) {
+  async run(scenario, projectName, projectType, org, token, s3) {
     if (!SCENARIO_KEYS.has(scenario)) throw new Error(`Unhandled scenario: ${scenario}`);
 
     const template = TEMPLATES[projectType];
@@ -156,18 +400,19 @@ class ConfigSetup {
 
     const workdir = cloneRepo(org, projectName, token);
     await this[scenario](workdir, template);
-    this.commitAndPush(workdir, template);
+    if (s3) this.s3(workdir, template);
+    this.commitAndPush(workdir, template, { s3 });
   }
 }
 
 async function main() {
   const preprocessor = new ConfigPreprocessor();
   const setup = new ConfigSetup();
-  const { scenario, projectName, projectType, org, token } = preprocessor.prepare();
+  const { scenario, projectName, projectType, org, token, s3 } = preprocessor.prepare();
 
-  console.log(`Config setup for '${projectName}' (${projectType}, ${scenario}).`);
+  console.log(`Config setup for '${projectName}' (${projectType}, ${scenario}, s3: ${s3}).`);
 
-  await setup.run(scenario, projectName, projectType, org, token);
+  await setup.run(scenario, projectName, projectType, org, token, s3);
 }
 
-module.exports = { main };
+module.exports = { main, ConfigSetup };

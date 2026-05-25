@@ -248,6 +248,60 @@ class Infisical {
     );
     console.log(`Infisical: set DATABASE_URL for environment 'prod' at path '${secretPath}'.`);
   }
+
+  /**
+   * Writes the per-environment Cloudflare R2 credentials under the app's secret
+   * folder `/{projectName}/{appFolder}` (created by the secrets setup job).
+   * Each environment receives its own bucket + scoped token, so `perEnv` maps an
+   * Infisical environment to the four `R2_*` values for that environment.
+   *
+   * No-ops when Infisical machine-identity fields are unset.
+   *
+   * @param {{
+   *   clientId?: string;
+   *   clientSecret?: string;
+   *   projectId?: string;
+   *   projectName: string;
+   *   appFolder?: string;
+   *   perEnv: Record<string, {
+   *     accountId: string;
+   *     accessKeyId: string;
+   *     secretAccessKey: string;
+   *     bucketName: string;
+   *   }>;
+   * }} opts
+   */
+  static async pushR2Credentials(opts) {
+    const clientId = opts.clientId?.trim();
+    const clientSecret = opts.clientSecret?.trim();
+    const projectId = opts.projectId?.trim();
+    if (!clientId || !clientSecret || !projectId) {
+      console.log(
+        "Infisical: skipping R2 credential push (INFISICAL_CLIENT_ID / INFISICAL_CLIENT_SECRET / INFISICAL_PROJECT_ID not set).",
+      );
+      return;
+    }
+
+    const { projectName, appFolder, perEnv } = opts;
+    const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
+    const secretPath = appFolder ? `${base}/${appFolder}` : base;
+
+    const infisical = new Infisical();
+    const token = await infisical.login(clientId, clientSecret);
+
+    for (const [environment, creds] of Object.entries(perEnv)) {
+      const secrets = {
+        R2_ACCOUNT_ID: creds.accountId,
+        R2_ACCESS_KEY_ID: creds.accessKeyId,
+        R2_SECRET_ACCESS_KEY: creds.secretAccessKey,
+        R2_BUCKET_NAME: creds.bucketName,
+      };
+      for (const [name, value] of Object.entries(secrets)) {
+        await infisical.upsertSecret(token, projectId, environment, secretPath, name, value);
+      }
+      console.log(`Infisical: set R2_* for environment '${environment}' at path '${secretPath}'.`);
+    }
+  }
 }
 
 module.exports = { Infisical };

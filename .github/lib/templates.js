@@ -13,8 +13,10 @@
  * @property {string} [apiDir]      Repo-relative path to the API package root.
  * @property {string} [apiHealthCheckPath]  HTTP health check path for the API (Render).
  * @property {number} [apiPort]     Port the API server listens on inside the container.
+ * @property {string | null} [apiPnpmFilter]  pnpm `--filter` for the API workspace, or null/undefined.
  * @property {string[]} infisicalApps  Per-app secret subfolders created under `/{projectName}` (e.g. ["web", "api"]).
  * @property {string} dbSecretApp   Which `infisicalApps` subfolder receives `DATABASE_URL`.
+ * @property {string} s3SecretApp   Which `infisicalApps` subfolder receives the `R2_*` credentials.
  *
  * @type {Record<string, TemplateLayout>}
  */
@@ -26,6 +28,7 @@ const TEMPLATES = {
     hasApi: false,
     infisicalApps: ["web"],
     dbSecretApp: "web",
+    s3SecretApp: "web",
   },
   "sample-web-api-monorepo": {
     appDir: "apps/web",
@@ -35,8 +38,10 @@ const TEMPLATES = {
     apiDir: "apps/api",
     apiHealthCheckPath: "/health",
     apiPort: 8000,
+    apiPnpmFilter: "api",
     infisicalApps: ["web", "api"],
     dbSecretApp: "api",
+    s3SecretApp: "api",
   },
 };
 
