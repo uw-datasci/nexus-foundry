@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { Infisical } = require("./integrations/infisical.js");
+const { Infisical } = require("../lib/integrations/infisical.js");
 const { getTemplate } = require("../lib/templates.js");
 
 class SecretsSetupPreprocessor {

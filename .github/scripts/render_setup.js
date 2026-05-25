@@ -2,8 +2,8 @@
 
 const { execFileSync } = require("node:child_process");
 
-const { Infisical } = require("./integrations/infisical.js");
-const { RenderClient } = require("./integrations/render.js");
+const { Infisical } = require("../lib/integrations/infisical.js");
+const { RenderClient } = require("../lib/integrations/render.js");
 const { getTemplate } = require("../lib/templates.js");
 
 class RenderSetupPreprocessor {

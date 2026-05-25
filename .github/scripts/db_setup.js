@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { provisionNeonProject } = require("./db/neon_setup");
+const { provisionNeonProject } = require("../lib/db/neon_setup");
 const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
 const { getTemplate } = require("../lib/templates");
 

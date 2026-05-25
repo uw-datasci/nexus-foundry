@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const { Infisical } = require("./integrations/infisical.js");
-const { VercelClient } = require("./integrations/vercel.js");
+const { Infisical } = require("../lib/integrations/infisical.js");
+const { VercelClient } = require("../lib/integrations/vercel.js");
 
 /**
  * @param {string} raw
