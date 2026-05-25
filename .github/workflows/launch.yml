@@ -48,8 +48,8 @@ on:
         default: "false"
         type: string
       description:
-        description: "Project description"
-        required: false
+        description: "Project description (required for codegen)"
+        required: true
         type: string
       domain:
         description: "Production hostname for Vercel"
@@ -84,6 +84,7 @@ jobs:
       description: ${{ steps.payload.outputs.description }}
       domain: ${{ steps.payload.outputs.domain }}
       has_api: ${{ steps.derive.outputs.has_api }}
+      has_description: ${{ steps.description_gate.outputs.has_description }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -111,6 +112,19 @@ jobs:
         run: |
           node -e "const{getTemplate}=require('./.github/lib/templates.js');const t=getTemplate(process.env.PROJECT_TYPE);require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'has_api='+(t&&t.hasApi?'true':'false')+'\n')"
 
+      - name: Gate codegen on description
+        id: description_gate
+        shell: bash
+        env:
+          DESCRIPTION: ${{ steps.payload.outputs.description }}
+        run: |
+          trimmed="$(printf '%s' "$DESCRIPTION" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          if [ -n "$trimmed" ]; then
+            echo "has_description=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_description=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log request (placeholder)
         run: |
           echo "Project: ${{ steps.payload.outputs.project_name }}"
@@ -122,6 +136,7 @@ jobs:
           echo "Redis: ${{ steps.payload.outputs.redis }}"
           echo "S3: ${{ steps.payload.outputs.s3 }}"
           echo "Description: ${{ steps.payload.outputs.description }}"
+          echo "Codegen: ${{ steps.description_gate.outputs.has_description == 'true' && 'enabled' || 'skipped (empty description)' }}"
           echo "Domain: ${{ steps.payload.outputs.domain }}"
 
   create_repo:
@@ -291,6 +306,7 @@ jobs:
   codegen:
     runs-on: ubuntu-latest
     needs: [ setup, config ]
+    if: needs.setup.outputs.has_description == 'true'
     timeout-minutes: 30
     steps:
       - name: Checkout repository

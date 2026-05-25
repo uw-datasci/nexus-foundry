@@ -39,6 +39,7 @@ class CodegenPreprocessor {
       "PROJECT_NAME",
       "PROJECT_TYPE",
       "DATABASE",
+      "DESCRIPTION",
       "GITHUB_ORG",
       "GH_TOKEN",
       "COPILOT_GITHUB_TOKEN",
@@ -59,7 +60,7 @@ class CodegenPreprocessor {
       projectType: process.env.PROJECT_TYPE.trim(),
       org: process.env.GITHUB_ORG.trim(),
       token: process.env.GH_TOKEN.trim(),
-      description: opt("DESCRIPTION"),
+      description: process.env.DESCRIPTION.trim(),
       scenario,
       model,
       planModel: opt("COPILOT_PLAN_MODEL", model),
@@ -162,9 +163,7 @@ class CodegenSetup {
         ? grounding.scriptNames.join(", ")
         : "(none detected)",
       FILE_TREE: grounding.fileTree,
-      DESCRIPTION_BLOCK: ctx.description
-        ? ctx.description
-        : "_No description was provided. Produce a sensible, minimal baseline app for this template._",
+      DESCRIPTION_BLOCK: ctx.description,
     };
   }
 

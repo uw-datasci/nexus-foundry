@@ -129,7 +129,9 @@ The workflow also expects Infisical credentials as `INFISICAL_CLIENT_ID` and `IN
 
 ## Codegen
 
-The **codegen** job clones the generated repo, writes `AGENTS.md` from a template, then runs three Copilot CLI phases:
+The **codegen** job runs only when `description` is non-empty after trimming whitespace. Otherwise it is skipped and the launch completes without a scaffold PR.
+
+When it runs, it clones the generated repo, writes `AGENTS.md` from a template, then runs three Copilot CLI phases:
 
 1. **Plan** — writes `PLAN.md` (full-app spec)
 2. **Build** — scaffolding stubs aligned with the plan
