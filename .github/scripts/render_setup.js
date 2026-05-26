@@ -10,6 +10,7 @@ const { apiUrlSecretsPath, getTemplate, renderSyncPath } = require("../lib/templ
 const DEPLOY_API_WORKFLOW = "deploy-api.yml";
 const DEPLOY_API_WAIT_TIMEOUT_MS = 15 * 60 * 1000;
 const DEPLOY_API_POLL_INTERVAL_MS = 15 * 1000;
+const INFISICAL_DEV_API_URL = "http://localhost:8000";
 
 class RenderSetupPreprocessor {
   assertRequiredEnv(keys) {
@@ -234,9 +235,9 @@ class RenderSetup {
   }
 
   /**
-   * Logs in once, stores the deployed API URL in the project's api folder
-   * (`/{projectName}/api`) across all environments, then ensures prod + staging
-   * Infisical → Render secret syncs from that same folder.
+   * Logs in once, stores API_URL in the project's api folder (`/{projectName}/api`):
+   * dev → localhost, staging/prod → deployed Render URL. Then ensures prod
+   * Infisical → Render secret sync from that folder.
    *
    * @param {string} serviceId
    * @param {string | null} apiUrl
@@ -260,15 +261,18 @@ class RenderSetup {
     if (apiUrl) {
       if (apiUrlPath) {
         for (const environment of ["dev", "staging", "prod"]) {
+          const url = environment === "dev" ? INFISICAL_DEV_API_URL : apiUrl;
           await infisical.upsertSecret(
             token,
             infisicalProjectId,
             environment,
             apiUrlPath,
             "API_URL",
-            apiUrl,
+            url,
           );
-          console.log(`Infisical: set API_URL for '${environment}' at '${apiUrlPath}'.`);
+          console.log(
+            `Infisical: set API_URL for '${environment}' at '${apiUrlPath}' → ${url}.`,
+          );
         }
       } else {
         console.warn("Render: API URL available but template has no apiUrl folder; skipping.");
