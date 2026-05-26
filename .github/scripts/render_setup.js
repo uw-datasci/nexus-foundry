@@ -3,6 +3,7 @@
 const { execFileSync } = require("node:child_process");
 
 const { Infisical } = require("../lib/integrations/infisical.js");
+const { GitHubActionsClient } = require("../lib/integrations/github_actions.js");
 const { RenderClient } = require("../lib/integrations/render.js");
 const { apiUrlSecretsPath, getTemplate, renderSyncPath } = require("../lib/templates.js");
 
@@ -235,6 +236,16 @@ class RenderSetup {
       );
       return;
     }
+
+    const deployWorkflow = template.apiDeployWorkflow ?? "deploy-api.yml";
+    const ghToken = process.env.GH_TOKEN?.trim();
+    if (!ghToken) throw new Error("GH_TOKEN is required to wait for API deploy workflow.");
+
+    await new GitHubActionsClient(ghToken).waitForWorkflowSuccess({
+      owner: githubOrg,
+      repo: projectName,
+      workflowFile: deployWorkflow,
+    });
 
     const environmentId = await this.render.getProjectEnvironmentId(renderProjectId);
 
