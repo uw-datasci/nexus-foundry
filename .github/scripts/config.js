@@ -130,7 +130,7 @@ class ConfigSetup {
    *
    * @param {string} workdir
    * @param {{ appDir: string; configDir: string; hasApi?: boolean; apiDir?: string }} template
-   * @param {{ s3?: boolean; workflowFiles?: string[] }} [opts]
+   * @param {{ s3?: boolean; workflowFiles?: string[]; envFiles?: string[] }} [opts]
    * @returns {string | null}
    */
   commitAndPush(workdir, template, opts = {}) {
@@ -159,6 +159,10 @@ class ConfigSetup {
 
     if (opts.workflowFiles?.length) {
       filePaths.push(...opts.workflowFiles);
+    }
+
+    if (opts.envFiles?.length) {
+      filePaths.push(...opts.envFiles);
     }
 
     // Stage only files that exist (e.g. db.ts is absent for non-neon scenarios).
@@ -481,6 +485,62 @@ class ConfigSetup {
     return modified;
   }
 
+  /**
+   * Resolves `<NAME>_INFISICAL_PATH=<infisical-directory-here>` placeholders
+   * in the generated repo's root `.env.example`.
+   *
+   * Mapping:
+   *   - NAME == "SECRET"                   → /{projectName}
+   *   - NAME == "DB"                       → /{projectName}/{infisical.platform} (DB/S3/Redis live with platform)
+   *   - NAME.toLowerCase() ∈ subfolders    → /{projectName}/{name.toLowerCase()}
+   *   - anything else                      → throw (template drift)
+   *
+   * Returns the repo-relative paths it modified, so the caller can stage them.
+   *
+   * @param {string} workdir
+   * @param {string} projectName
+   * @param {{ infisical?: { subfolders?: string[]; platform?: string | null } }} template
+   * @returns {string[]}
+   */
+  applyEnvExampleInfisicalPaths(workdir, projectName, template) {
+    const relPath = ".env.example";
+    const absPath = path.join(workdir, relPath);
+    if (!fs.existsSync(absPath)) {
+      console.log(`config: no ${relPath} in generated repo (skip).`);
+      return [];
+    }
+
+    const subfolders = new Set(template.infisical?.subfolders ?? []);
+    const platform = template.infisical?.platform ?? null;
+    const pattern =
+      /^([ \t]*([A-Z][A-Z0-9_]*)_INFISICAL_PATH=)<infisical-directory-here>[ \t]*$/gm;
+
+    const resolve = (name) => {
+      if (name === "SECRET") return infisicalPath(projectName, null);
+      if (name === "DB") return infisicalPath(projectName, platform);
+      const folder = name.toLowerCase();
+      if (subfolders.has(folder)) return infisicalPath(projectName, folder);
+      throw new Error(
+        `config: cannot resolve ${name}_INFISICAL_PATH — '${folder}' is not in template.infisical.subfolders (${[...subfolders].join(", ") || "none"}).`,
+      );
+    };
+
+    const original = fs.readFileSync(absPath, "utf8");
+    const changes = [];
+    const updated = original.replace(pattern, (_match, prefix, name) => {
+      const resolved = resolve(name);
+      changes.push({ name, resolved });
+      return `${prefix}${resolved}`;
+    });
+
+    if (updated === original) return [];
+    fs.writeFileSync(absPath, updated);
+    for (const { name, resolved } of changes) {
+      console.log(`config: resolved ${name}_INFISICAL_PATH in ${relPath} → ${resolved}.`);
+    }
+    return [relPath];
+  }
+
   async run(scenario, projectName, projectType, org, token, s3) {
     if (!SCENARIO_KEYS.has(scenario)) throw new Error(`Unhandled scenario: ${scenario}`);
 
@@ -494,8 +554,9 @@ class ConfigSetup {
     await this[scenario](workdir, template);
     if (s3) this.s3(workdir, template);
     const workflowFiles = this.applyWorkflowInfisicalPaths(workdir, projectName, template);
+    const envFiles = this.applyEnvExampleInfisicalPaths(workdir, projectName, template);
     this.syncLockfile(workdir);
-    return this.commitAndPush(workdir, template, { s3, workflowFiles });
+    return this.commitAndPush(workdir, template, { s3, workflowFiles, envFiles });
   }
 }
 

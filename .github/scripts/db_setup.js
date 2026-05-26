@@ -2,11 +2,15 @@
 
 const { provisionNeonProject } = require("../lib/db/neon_setup");
 const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
-const { getInfisicalLayout, platformSecretsPath } = require("../lib/templates");
+const {
+  getInfisicalLayout,
+  platformSecretsPath,
+  databaseDevSecretsPath,
+} = require("../lib/templates");
 
 class DatabaseSetup {
-  async neon(projectName, platformFolder) {
-    await provisionNeonProject(projectName, platformFolder);
+  async neon(projectName, folders) {
+    await provisionNeonProject(projectName, folders);
   }
 
   supabase(projectName) {
@@ -21,12 +25,12 @@ class DatabaseSetup {
     console.log(`Flow: Mongoose - use Mongoose ODM wiring for '${projectName}'.`);
   }
 
-  async run(scenario, projectName, platformFolder) {
+  async run(scenario, projectName, folders) {
     if (!SCENARIO_KEYS.has(scenario)) {
       throw new Error(`Unhandled scenario: ${scenario}`);
     }
 
-    await this[scenario](projectName, platformFolder);
+    await this[scenario](projectName, folders);
   }
 }
 
@@ -51,21 +55,36 @@ class DbSetupPreprocessor {
     this.assertRequiredEnv(["DATABASE", "PROJECT_NAME", "PROJECT_TYPE"]);
     const inputs = this.readDbInputs();
     const scenario = deriveScenario(inputs);
-    const platformFolder = getInfisicalLayout(inputs.projectType).platform;
-    return { scenario, projectName: inputs.projectName, projectType: inputs.projectType, platformFolder };
+    const layout = getInfisicalLayout(inputs.projectType);
+    return {
+      scenario,
+      projectName: inputs.projectName,
+      projectType: inputs.projectType,
+      folders: {
+        prodFolder: layout.platform,
+        devFolder: layout.databaseDev ?? layout.platform,
+      },
+    };
   }
 }
 
 async function main() {
   const preprocessor = new DbSetupPreprocessor();
   const setup = new DatabaseSetup();
-  const { scenario, projectName, projectType, platformFolder } = preprocessor.prepare();
+  const { scenario, projectName, projectType, folders } = preprocessor.prepare();
+
+  const devPath = databaseDevSecretsPath(projectName, projectType);
+  const prodPath = platformSecretsPath(projectName, projectType);
+  const dest =
+    devPath === prodPath
+      ? prodPath
+      : `dev/staging → ${devPath}, prod → ${prodPath}`;
 
   console.log(
-    `Database setup for project '${projectName}' (scenario: ${scenario}, DATABASE_URL → ${platformSecretsPath(projectName, projectType)}).`,
+    `Database setup for project '${projectName}' (scenario: ${scenario}, DATABASE_URL ${dest}).`,
   );
 
-  await setup.run(scenario, projectName, platformFolder);
+  await setup.run(scenario, projectName, folders);
 }
 
 module.exports = { main };

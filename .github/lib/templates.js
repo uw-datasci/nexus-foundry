@@ -3,7 +3,8 @@
 /**
  * @typedef {Object} InfisicalLayout
  * @property {string[]} subfolders  Folders under `/{projectName}` (`[]` = none).
- * @property {string | null} platform  DB / S3 / Redis → `/{projectName}` or `/{projectName}/{platform}`.
+ * @property {string | null} platform  Prod DB / S3 / Redis → `/{projectName}` or `/{projectName}/{platform}`.
+ * @property {string | null} [databaseDev]  Dev/staging `DATABASE_URL` folder; defaults to `platform`.
  * @property {string | null} apiUrl  `API_URL` folder; `null` = not pushed by Foundry.
  * @property {string | null} vercelSync  Infisical → Vercel sync source folder.
  * @property {string | null} renderSync  Infisical → Render sync source folder.
@@ -50,8 +51,9 @@ const TEMPLATES = {
     apiPort: 8000,
     apiPnpmFilter: "api",
     infisical: {
-      subfolders: ["web", "api"],
+      subfolders: ["web", "api", "db"],
       platform: "api",
+      databaseDev: "db",
       apiUrl: "web",
       vercelSync: "web",
       renderSync: "api",
@@ -99,6 +101,17 @@ function platformSecretsPath(projectName, projectType) {
 /**
  * @param {string} projectName
  * @param {string} projectType
+ * @returns {string}
+ */
+function databaseDevSecretsPath(projectName, projectType) {
+  const layout = getInfisicalLayout(projectType);
+  const folder = layout.databaseDev ?? layout.platform;
+  return infisicalPath(projectName, folder);
+}
+
+/**
+ * @param {string} projectName
+ * @param {string} projectType
  * @returns {string | null}
  */
 function apiUrlSecretsPath(projectName, projectType) {
@@ -141,6 +154,7 @@ module.exports = {
   getInfisicalLayout,
   infisicalPath,
   platformSecretsPath,
+  databaseDevSecretsPath,
   apiUrlSecretsPath,
   vercelSyncPath,
   renderSyncPath,

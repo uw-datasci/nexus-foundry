@@ -189,10 +189,10 @@ class Infisical {
   }
 
   /**
-   * Writes Neon branch URIs as DATABASE_URL under the app's secret folder
-   * `/{projectName}/{appFolder}` (created by the secrets setup job). Dev branch
-   * URI → dev and staging; prod branch URI → prod. Falls back to
-   * `/{projectName}` when `appFolder` is omitted.
+   * Writes Neon branch URIs as DATABASE_URL (created by the secrets setup job).
+   * Dev branch URI → `devAppFolder` in dev and staging; prod branch URI →
+   * `appFolder` in prod. When `devAppFolder` is omitted, both use `appFolder`.
+   * Paths are `/{projectName}` or `/{projectName}/{folder}`.
    *
    * No-ops when Infisical machine-identity fields are unset.
    *
@@ -201,7 +201,8 @@ class Infisical {
    *   clientSecret?: string;
    *   projectId?: string;
    *   projectName: string;
-   *   appFolder?: string;
+   *   appFolder?: string | null;
+   *   devAppFolder?: string | null;
    *   devConnectionUri: string;
    *   prodConnectionUri: string;
    * }} opts
@@ -218,8 +219,11 @@ class Infisical {
     }
 
     const { projectName, appFolder, devConnectionUri, prodConnectionUri } = opts;
+    const devAppFolder = opts.devAppFolder !== undefined ? opts.devAppFolder : appFolder;
     const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
-    const secretPath = appFolder ? `${base}/${appFolder}` : base;
+    const toPath = (folder) => (folder ? `${base}/${folder}` : base);
+    const devSecretPath = toPath(devAppFolder ?? null);
+    const prodSecretPath = toPath(appFolder ?? null);
 
     const infisical = new Infisical();
     const token = await infisical.login(clientId, clientSecret);
@@ -229,12 +233,12 @@ class Infisical {
         token,
         projectId,
         environment,
-        secretPath,
+        devSecretPath,
         "DATABASE_URL",
         devConnectionUri,
       );
       console.log(
-        `Infisical: set DATABASE_URL for environment '${environment}' at path '${secretPath}'.`,
+        `Infisical: set DATABASE_URL for environment '${environment}' at path '${devSecretPath}'.`,
       );
     }
 
@@ -242,11 +246,11 @@ class Infisical {
       token,
       projectId,
       "prod",
-      secretPath,
+      prodSecretPath,
       "DATABASE_URL",
       prodConnectionUri,
     );
-    console.log(`Infisical: set DATABASE_URL for environment 'prod' at path '${secretPath}'.`);
+    console.log(`Infisical: set DATABASE_URL for environment 'prod' at path '${prodSecretPath}'.`);
   }
 
   /**

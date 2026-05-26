@@ -330,9 +330,13 @@ class NeonSetup {
  * INFISICAL_PROJECT_ID.
  *
  * @param {string} projectName Foundry project slug (kebab-case)
- * @param {string | null} [platformFolder] Infisical subfolder for DATABASE_URL; null = project root.
+ * @param {{
+ *   prodFolder?: string | null;
+ *   devFolder?: string | null;
+ * }} [folders] Infisical subfolders for DATABASE_URL; omitted/null = project root.
  */
-async function provisionNeonProject(projectName, platformFolder) {
+async function provisionNeonProject(projectName, folders = {}) {
+  const { prodFolder = null, devFolder = null } = folders;
   const preprocessor = new NeonSetupPreprocessor();
   const ctx = preprocessor.prepare();
 
@@ -344,7 +348,8 @@ async function provisionNeonProject(projectName, platformFolder) {
     clientSecret: process.env.INFISICAL_CLIENT_SECRET,
     projectId: process.env.INFISICAL_PROJECT_ID,
     projectName,
-    appFolder: platformFolder,
+    appFolder: prodFolder,
+    devAppFolder: devFolder,
     devConnectionUri: result.devConnectionUri,
     prodConnectionUri: result.prodConnectionUri,
   });
