@@ -2,11 +2,11 @@
 
 const { provisionNeonProject } = require("../lib/db/neon_setup");
 const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
-const { getTemplate } = require("../lib/templates");
+const { getInfisicalLayout, platformSecretsPath } = require("../lib/templates");
 
 class DatabaseSetup {
-  async neon(projectName, dbSecretApp) {
-    await provisionNeonProject(projectName, dbSecretApp);
+  async neon(projectName, platformFolder) {
+    await provisionNeonProject(projectName, platformFolder);
   }
 
   supabase(projectName) {
@@ -21,12 +21,12 @@ class DatabaseSetup {
     console.log(`Flow: Mongoose - use Mongoose ODM wiring for '${projectName}'.`);
   }
 
-  async run(scenario, projectName, dbSecretApp) {
+  async run(scenario, projectName, platformFolder) {
     if (!SCENARIO_KEYS.has(scenario)) {
       throw new Error(`Unhandled scenario: ${scenario}`);
     }
 
-    await this[scenario](projectName, dbSecretApp);
+    await this[scenario](projectName, platformFolder);
   }
 }
 
@@ -51,22 +51,21 @@ class DbSetupPreprocessor {
     this.assertRequiredEnv(["DATABASE", "PROJECT_NAME", "PROJECT_TYPE"]);
     const inputs = this.readDbInputs();
     const scenario = deriveScenario(inputs);
-    const template = getTemplate(inputs.projectType);
-    const dbSecretApp = template?.dbSecretApp ?? (template?.hasApi ? "api" : "web");
-    return { scenario, projectName: inputs.projectName, dbSecretApp };
+    const platformFolder = getInfisicalLayout(inputs.projectType).platform;
+    return { scenario, projectName: inputs.projectName, projectType: inputs.projectType, platformFolder };
   }
 }
 
 async function main() {
   const preprocessor = new DbSetupPreprocessor();
   const setup = new DatabaseSetup();
-  const { scenario, projectName, dbSecretApp } = preprocessor.prepare();
+  const { scenario, projectName, projectType, platformFolder } = preprocessor.prepare();
 
   console.log(
-    `Database setup for project '${projectName}' (scenario: ${scenario}, DATABASE_URL → /${projectName}/${dbSecretApp}).`,
+    `Database setup for project '${projectName}' (scenario: ${scenario}, DATABASE_URL → ${platformSecretsPath(projectName, projectType)}).`,
   );
 
-  await setup.run(scenario, projectName, dbSecretApp);
+  await setup.run(scenario, projectName, platformFolder);
 }
 
 module.exports = { main };

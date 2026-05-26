@@ -4,7 +4,7 @@ const { execFileSync } = require("node:child_process");
 
 const { Infisical } = require("../lib/integrations/infisical.js");
 const { RenderClient } = require("../lib/integrations/render.js");
-const { getTemplate } = require("../lib/templates.js");
+const { apiUrlSecretsPath, renderSyncPath } = require("../lib/templates.js");
 
 class RenderSetupPreprocessor {
   assertRequiredEnv(keys) {
@@ -167,10 +167,13 @@ class RenderSetup {
    * @param {string | null} apiUrl
    */
   async setupInfisicalRender(serviceId, apiUrl) {
-    const { projectName, infisicalProjectId, infisicalRenderConnectionId } = this.ctx;
+    const { projectName, projectType, infisicalProjectId, infisicalRenderConnectionId } =
+      this.ctx;
 
-    const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
-    const secretPath = `${base}/api`;
+    const renderSecretPath = renderSyncPath(projectName, projectType);
+    if (!renderSecretPath) {
+      throw new Error(`Template '${projectType}' has no Infisical Render sync folder.`);
+    }
 
     const infisical = new Infisical();
     const token = await infisical.login(
@@ -178,17 +181,22 @@ class RenderSetup {
       process.env.INFISICAL_CLIENT_SECRET.trim(),
     );
 
+    const apiUrlPath = apiUrlSecretsPath(projectName, projectType);
     if (apiUrl) {
-      for (const environment of ["dev", "staging", "prod"]) {
-        await infisical.upsertSecret(
-          token,
-          infisicalProjectId,
-          environment,
-          secretPath,
-          "API_URL",
-          apiUrl,
-        );
-        console.log(`Infisical: set API_URL for '${environment}' at '${secretPath}'.`);
+      if (apiUrlPath) {
+        for (const environment of ["dev", "staging", "prod"]) {
+          await infisical.upsertSecret(
+            token,
+            infisicalProjectId,
+            environment,
+            apiUrlPath,
+            "API_URL",
+            apiUrl,
+          );
+          console.log(`Infisical: set API_URL for '${environment}' at '${apiUrlPath}'.`);
+        }
+      } else {
+        console.warn("Render: API URL available but template has no apiUrl folder; skipping.");
       }
     } else {
       console.warn("Render: service URL not available yet; skipping API_URL secret.");
@@ -203,7 +211,7 @@ class RenderSetup {
       infisicalProjectId,
       connectionId: infisicalRenderConnectionId,
       infisicalEnvironment: "prod",
-      secretPath,
+      secretPath: renderSecretPath,
       serviceId,
     });
   }

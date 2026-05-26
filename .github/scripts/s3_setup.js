@@ -2,7 +2,7 @@
 
 const { CloudflareClient } = require("../lib/integrations/cloudflare.js");
 const { Infisical } = require("../lib/integrations/infisical.js");
-const { getTemplate } = require("../lib/templates.js");
+const { getInfisicalLayout, platformSecretsPath } = require("../lib/templates.js");
 
 /** Infisical environments that each get an isolated bucket + scoped token. */
 const ENVIRONMENTS = ["dev", "staging", "prod"];
@@ -26,21 +26,21 @@ class S3SetupPreprocessor {
     ]);
 
     const projectType = process.env.PROJECT_TYPE.trim();
-    const template = getTemplate(projectType);
-    const s3SecretApp = template?.s3SecretApp ?? (template?.hasApi ? "api" : "web");
+    const platformFolder = getInfisicalLayout(projectType).platform;
 
     return {
       projectName: process.env.PROJECT_NAME.trim(),
+      projectType,
+      platformFolder,
       accountId: process.env.CLOUDFLARE_ACCOUNT_ID.trim(),
       apiToken: process.env.CLOUDFLARE_API_TOKEN.trim(),
-      s3SecretApp,
     };
   }
 }
 
 class S3Setup {
   /**
-   * @param {{ projectName: string; accountId: string; apiToken: string; s3SecretApp: string }} ctx
+   * @param {{ projectName: string; projectType: string; platformFolder: string | null; accountId: string; apiToken: string }} ctx
    */
   constructor(ctx) {
     this.ctx = ctx;
@@ -89,10 +89,10 @@ class S3Setup {
   }
 
   async run() {
-    const { projectName, s3SecretApp } = this.ctx;
+    const { projectName, projectType, platformFolder } = this.ctx;
 
     console.log(
-      `S3 setup for project '${projectName}' (R2_* → /${projectName}/${s3SecretApp}, environments: ${ENVIRONMENTS.join(", ")}).`,
+      `S3 setup for project '${projectName}' (R2_* → ${platformSecretsPath(projectName, projectType)}, environments: ${ENVIRONMENTS.join(", ")}).`,
     );
 
     const perEnv = await this.provisionPerEnvironment();
@@ -102,7 +102,7 @@ class S3Setup {
       clientSecret: process.env.INFISICAL_CLIENT_SECRET,
       projectId: process.env.INFISICAL_PROJECT_ID,
       projectName,
-      appFolder: s3SecretApp,
+      appFolder: platformFolder,
       perEnv,
     });
   }

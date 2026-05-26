@@ -240,6 +240,7 @@ jobs:
         uses: actions/github-script@v9
         env:
           PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
+          PROJECT_TYPE: ${{ needs.setup.outputs.project_type }}
           DOMAIN: ${{ needs.setup.outputs.domain }}
           GITHUB_ORG: ${{ github.repository_owner }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

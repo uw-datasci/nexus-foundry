@@ -2,6 +2,7 @@
 
 const { Infisical } = require("../lib/integrations/infisical.js");
 const { VercelClient } = require("../lib/integrations/vercel.js");
+const { vercelSyncPath } = require("../lib/templates.js");
 
 /**
  * @param {string} raw
@@ -26,6 +27,7 @@ class VercelSetupPreprocessor {
   prepare() {
     this.assertRequiredEnv([
       "PROJECT_NAME",
+      "PROJECT_TYPE",
       "GITHUB_ORG",
       "VERCEL_TOKEN",
       "VERCEL_TEAM_ID",
@@ -36,9 +38,11 @@ class VercelSetupPreprocessor {
     ]);
 
     const domain = normalizeDomain(process.env.DOMAIN ?? "");
+    const projectType = process.env.PROJECT_TYPE.trim();
 
     return {
       projectName: process.env.PROJECT_NAME.trim(),
+      projectType,
       githubOrg: process.env.GITHUB_ORG.trim(),
       vercelToken: process.env.VERCEL_TOKEN.trim(),
       vercelTeamId: process.env.VERCEL_TEAM_ID.trim(),
@@ -59,6 +63,7 @@ class VercelSetup {
    *   infisicalProjectId: string;
    *   infisicalVercelConnectionId: string;
    *   domain: string;
+   *   projectType: string;
    * }} ctx
    */
   constructor(ctx) {
@@ -109,6 +114,7 @@ class VercelSetup {
    *   infisicalEnvironment: string;
    *   secretPath: string;
    *   destinationConfig: {
+   *     scope: "project";
    *     app: string;
    *     appName: string;
    *     env: string;
@@ -151,11 +157,10 @@ class VercelSetup {
    * @param {string} vercelAppId
    */
   async ensureInfisicalVercelSyncs(vercelAppId) {
-    const { projectName, vercelTeamId, infisicalProjectId, infisicalVercelConnectionId } =
+    const { projectName, projectType, vercelTeamId, infisicalProjectId, infisicalVercelConnectionId } =
       this.ctx;
 
-    const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
-    const secretPath = `${base}/web`;
+    const secretPath = vercelSyncPath(projectName, projectType);
 
     const infisical = new Infisical();
     const token = await infisical.login(
@@ -187,6 +192,7 @@ class VercelSetup {
         infisicalEnvironment: s.infisicalEnvironment,
         secretPath,
         destinationConfig: {
+          scope: "project",
           app: vercelAppId,
           appName: projectName,
           env: s.vercelEnv,

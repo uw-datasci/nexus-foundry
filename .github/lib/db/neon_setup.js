@@ -330,9 +330,9 @@ class NeonSetup {
  * INFISICAL_PROJECT_ID.
  *
  * @param {string} projectName Foundry project slug (kebab-case)
- * @param {string} [dbSecretApp] App subfolder that receives DATABASE_URL (e.g. "api").
+ * @param {string | null} [platformFolder] Infisical subfolder for DATABASE_URL; null = project root.
  */
-async function provisionNeonProject(projectName, dbSecretApp) {
+async function provisionNeonProject(projectName, platformFolder) {
   const preprocessor = new NeonSetupPreprocessor();
   const ctx = preprocessor.prepare();
 
@@ -344,7 +344,7 @@ async function provisionNeonProject(projectName, dbSecretApp) {
     clientSecret: process.env.INFISICAL_CLIENT_SECRET,
     projectId: process.env.INFISICAL_PROJECT_ID,
     projectName,
-    appFolder: dbSecretApp,
+    appFolder: platformFolder,
     devConnectionUri: result.devConnectionUri,
     prodConnectionUri: result.prodConnectionUri,
   });

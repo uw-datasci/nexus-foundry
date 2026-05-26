@@ -1,22 +1,28 @@
 #!/usr/bin/env node
 
 /**
+ * @typedef {Object} InfisicalLayout
+ * @property {string[]} subfolders  Folders under `/{projectName}` (`[]` = none).
+ * @property {string | null} platform  DB / S3 / Redis → `/{projectName}` or `/{projectName}/{platform}`.
+ * @property {string | null} apiUrl  `API_URL` folder; `null` = not pushed by Foundry.
+ * @property {string | null} vercelSync  Infisical → Vercel sync source folder.
+ * @property {string | null} renderSync  Infisical → Render sync source folder.
+ */
+
+/**
  * Per-template layout. Static config and codegen both differ by where each
- * template keeps its app package and `config/` directory. Single source of
- * truth shared by config.js and codegen.js.
+ * template keeps its app package and `config/` directory.
  *
  * @typedef {Object} TemplateLayout
- * @property {string} appDir        Repo-relative path to the app package root.
- * @property {string} configDir     Path to the app's `config/` directory.
- * @property {string | null} pnpmFilter  pnpm `--filter` for the app workspace, or null.
- * @property {boolean} [hasApi]     Whether the template ships a deployable API server (gates render_setup).
- * @property {string} [apiDir]      Repo-relative path to the API package root.
- * @property {string} [apiHealthCheckPath]  HTTP health check path for the API (Render).
- * @property {number} [apiPort]     Port the API server listens on inside the container.
- * @property {string | null} [apiPnpmFilter]  pnpm `--filter` for the API workspace, or null/undefined.
- * @property {string[]} infisicalApps  Per-app secret subfolders created under `/{projectName}` (e.g. ["web", "api"]).
- * @property {string} dbSecretApp   Which `infisicalApps` subfolder receives `DATABASE_URL`.
- * @property {string} s3SecretApp   Which `infisicalApps` subfolder receives the `R2_*` credentials.
+ * @property {string} appDir
+ * @property {string} configDir
+ * @property {string | null} pnpmFilter
+ * @property {boolean} [hasApi]
+ * @property {string} [apiDir]
+ * @property {string} [apiHealthCheckPath]
+ * @property {number} [apiPort]
+ * @property {string | null} [apiPnpmFilter]
+ * @property {InfisicalLayout} infisical
  *
  * @type {Record<string, TemplateLayout>}
  */
@@ -26,9 +32,13 @@ const TEMPLATES = {
     configDir: "config",
     pnpmFilter: null,
     hasApi: false,
-    infisicalApps: ["web"],
-    dbSecretApp: "web",
-    s3SecretApp: "web",
+    infisical: {
+      subfolders: [],
+      platform: null,
+      apiUrl: null,
+      vercelSync: null,
+      renderSync: null,
+    },
   },
   "sample-web-api-monorepo": {
     appDir: "apps/web",
@@ -39,11 +49,83 @@ const TEMPLATES = {
     apiHealthCheckPath: "/health",
     apiPort: 8000,
     apiPnpmFilter: "api",
-    infisicalApps: ["web", "api"],
-    dbSecretApp: "api",
-    s3SecretApp: "api",
+    infisical: {
+      subfolders: ["web", "api"],
+      platform: "api",
+      apiUrl: "web",
+      vercelSync: "web",
+      renderSync: "api",
+    },
   },
 };
+
+/** @type {InfisicalLayout} */
+const DEFAULT_INFISICAL = {
+  subfolders: ["web"],
+  platform: "web",
+  apiUrl: null,
+  vercelSync: "web",
+  renderSync: null,
+};
+
+/**
+ * @param {string} projectName
+ * @param {string | null | undefined} folder
+ * @returns {string}
+ */
+function infisicalPath(projectName, folder) {
+  const base = projectName.startsWith("/") ? projectName : `/${projectName}`;
+  if (!folder) return base;
+  return `${base}/${folder}`;
+}
+
+/**
+ * @param {string} projectType
+ * @returns {InfisicalLayout}
+ */
+function getInfisicalLayout(projectType) {
+  return getTemplate(projectType)?.infisical ?? DEFAULT_INFISICAL;
+}
+
+/**
+ * @param {string} projectName
+ * @param {string} projectType
+ * @returns {string}
+ */
+function platformSecretsPath(projectName, projectType) {
+  return infisicalPath(projectName, getInfisicalLayout(projectType).platform);
+}
+
+/**
+ * @param {string} projectName
+ * @param {string} projectType
+ * @returns {string | null}
+ */
+function apiUrlSecretsPath(projectName, projectType) {
+  const folder = getInfisicalLayout(projectType).apiUrl;
+  if (!folder) return null;
+  return infisicalPath(projectName, folder);
+}
+
+/**
+ * @param {string} projectName
+ * @param {string} projectType
+ * @returns {string}
+ */
+function vercelSyncPath(projectName, projectType) {
+  return infisicalPath(projectName, getInfisicalLayout(projectType).vercelSync);
+}
+
+/**
+ * @param {string} projectName
+ * @param {string} projectType
+ * @returns {string | null}
+ */
+function renderSyncPath(projectName, projectType) {
+  const folder = getInfisicalLayout(projectType).renderSync;
+  if (!folder) return null;
+  return infisicalPath(projectName, folder);
+}
 
 /**
  * @param {string} projectType
@@ -53,4 +135,13 @@ function getTemplate(projectType) {
   return TEMPLATES[projectType] ?? null;
 }
 
-module.exports = { TEMPLATES, getTemplate };
+module.exports = {
+  TEMPLATES,
+  getTemplate,
+  getInfisicalLayout,
+  infisicalPath,
+  platformSecretsPath,
+  apiUrlSecretsPath,
+  vercelSyncPath,
+  renderSyncPath,
+};

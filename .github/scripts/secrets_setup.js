@@ -22,7 +22,7 @@ class SecretsSetupPreprocessor {
     const projectName = process.env.PROJECT_NAME.trim();
     const projectType = process.env.PROJECT_TYPE.trim();
     const template = getTemplate(projectType);
-    const appFolders = template?.infisicalApps ?? [];
+    const appFolders = template?.infisical?.subfolders ?? [];
 
     return {
       projectName,
