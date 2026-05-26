@@ -49,7 +49,7 @@ on:
         type: string
       description:
         description: "Project description (required for codegen)"
-        required: true
+        required: false
         type: string
       domain:
         description: "Production hostname for Vercel"
