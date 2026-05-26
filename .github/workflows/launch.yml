@@ -258,6 +258,8 @@ jobs:
       always() &&
       needs.create_repo.result == 'success' &&
       needs.vercel_setup.result == 'success'
+    outputs:
+      commit_sha: ${{ steps.apply.outputs.commit_sha }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -273,6 +275,7 @@ jobs:
           node-version: 24
 
       - name: Apply static configuration to generated repo
+        id: apply
         uses: actions/github-script@v9
         env:
           PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
@@ -303,6 +306,7 @@ jobs:
           PROJECT_TYPE: ${{ needs.setup.outputs.project_type }}
           GITHUB_ORG: ${{ github.repository_owner }}
           GH_TOKEN: ${{ secrets.FOUNDRY_GITHUB_TOKEN }}
+          CONFIG_COMMIT_SHA: ${{ needs.config.outputs.commit_sha }}
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_OWNER_ID: ${{ secrets.RENDER_OWNER_ID }}
           RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
