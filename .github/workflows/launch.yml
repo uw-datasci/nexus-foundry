@@ -226,12 +226,12 @@ jobs:
 
   vercel_setup:
     runs-on: ubuntu-latest
-    needs: [setup, db_setup, s3_setup, redis_setup]
+    needs: [setup, db_setup, redis_setup, s3_setup]
     if: |
       always() &&
       needs.db_setup.result == 'success' &&
-      (needs.s3_setup.result == 'success' || needs.s3_setup.result == 'skipped') &&
-      (needs.redis_setup.result == 'success' || needs.redis_setup.result == 'skipped')
+      (needs.redis_setup.result == 'success' || needs.redis_setup.result == 'skipped') &&
+      (needs.s3_setup.result == 'success' || needs.s3_setup.result == 'skipped')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -254,10 +254,7 @@ jobs:
   config:
     runs-on: ubuntu-latest
     needs: [setup, create_repo, vercel_setup]
-    if: |
-      always() &&
-      needs.create_repo.result == 'success' &&
-      needs.vercel_setup.result == 'success'
+    if: needs.vercel_setup.result == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -290,14 +287,7 @@ jobs:
 
   render_setup:
     runs-on: ubuntu-latest
-    needs: [setup, config, db_setup, s3_setup, redis_setup]
-    if: |
-      always() &&
-      needs.setup.outputs.has_api == 'true' &&
-      needs.config.result == 'success' &&
-      needs.db_setup.result == 'success' &&
-      (needs.s3_setup.result == 'success' || needs.s3_setup.result == 'skipped') &&
-      (needs.redis_setup.result == 'success' || needs.redis_setup.result == 'skipped')
+    needs: [setup, config]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -322,7 +312,7 @@ jobs:
 
   codegen:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo, config]
+    needs: [setup, config]
     if: needs.setup.outputs.has_description == 'true'
     timeout-minutes: 30
     steps:
