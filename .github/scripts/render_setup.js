@@ -220,6 +220,7 @@ class RenderSetup {
         initialSyncBehavior: "overwrite-destination",
       },
       destinationConfig: {
+        type: "env",
         scope: "service",
         serviceId: spec.serviceId,
       },
