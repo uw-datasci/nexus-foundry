@@ -2,7 +2,7 @@
 
 const { Infisical } = require("../lib/integrations/infisical.js");
 const { VercelClient } = require("../lib/integrations/vercel.js");
-const { vercelSyncPath } = require("../lib/templates.js");
+const { getVercelProjectCreateOptions, vercelSyncPath } = require("../lib/templates.js");
 
 /**
  * @param {string} raw
@@ -76,7 +76,11 @@ class VercelSetup {
 
   /**
    * @param {unknown} data
-   * @returns {Array<{ name?: string }>}
+   * @returns {Array<{
+   *   id?: string;
+   *   name?: string;
+   *   destinationConfig?: { sensitive?: boolean };
+   * }>}
    */
   parseSecretSyncList(data) {
     if (
@@ -119,6 +123,7 @@ class VercelSetup {
    *     appName: string;
    *     env: string;
    *     teamId: string;
+   *     sensitive: true;
    *   };
    * }} spec
    */
@@ -128,8 +133,25 @@ class VercelSetup {
       token,
       spec.infisicalProjectId,
     );
-    if (existing.some((s) => s.name === spec.name)) {
-      console.log(`Infisical: Vercel sync '${spec.name}' already exists, skip.`);
+    const match = existing.find((s) => s.name === spec.name);
+    if (match?.id) {
+      if (match.destinationConfig?.sensitive === true) {
+        console.log(
+          `Infisical: Vercel sync '${spec.name}' already exists with sensitive=true, skip.`,
+        );
+        return;
+      }
+      await infisical.infisicalRequest(`/api/v1/secret-syncs/vercel/${match.id}`, token, {
+        method: "PATCH",
+        body: { destinationConfig: spec.destinationConfig },
+      });
+      console.log(`Infisical: updated Vercel secret sync '${spec.name}' (sensitive=true).`);
+      await infisical.infisicalRequest(
+        `/api/v1/secret-syncs/vercel/${match.id}/sync-secrets`,
+        token,
+        { method: "POST" },
+      );
+      console.log(`Infisical: re-synced Vercel secret sync '${spec.name}'.`);
       return;
     }
 
@@ -150,15 +172,20 @@ class VercelSetup {
       method: "POST",
       body,
     });
-    console.log(`Infisical: created Vercel secret sync '${spec.name}'.`);
+    console.log(`Infisical: created Vercel secret sync '${spec.name}' (sensitive=true).`);
   }
 
   /**
    * @param {string} vercelAppId
    */
   async ensureInfisicalVercelSyncs(vercelAppId) {
-    const { projectName, projectType, vercelTeamId, infisicalProjectId, infisicalVercelConnectionId } =
-      this.ctx;
+    const {
+      projectName,
+      projectType,
+      vercelTeamId,
+      infisicalProjectId,
+      infisicalVercelConnectionId,
+    } = this.ctx;
 
     const secretPath = vercelSyncPath(projectName, projectType);
 
@@ -197,16 +224,19 @@ class VercelSetup {
           appName: projectName,
           env: s.vercelEnv,
           teamId: vercelTeamId,
+          sensitive: true,
         },
       });
     }
   }
 
   async run() {
-    const { projectName, githubOrg, domain } = this.ctx;
+    const { projectName, projectType, githubOrg, domain } = this.ctx;
+    const vercelCreateOptions = getVercelProjectCreateOptions(projectType);
     const { id: vercelAppId, name: vercelProjectName } = await this.vercel.ensureVercelProject(
       projectName,
       githubOrg,
+      vercelCreateOptions,
     );
     if (domain) {
       await this.vercel.applyLaunchDomain(vercelProjectName, domain);

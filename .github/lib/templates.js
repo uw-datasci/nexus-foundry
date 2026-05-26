@@ -148,6 +148,21 @@ function getTemplate(projectType) {
   return TEMPLATES[projectType] ?? null;
 }
 
+/**
+ * Vercel project settings applied when Foundry creates a linked project.
+ *
+ * @param {string} projectType
+ * @returns {{ framework: "nextjs"; rootDirectory?: string }}
+ */
+function getVercelProjectCreateOptions(projectType) {
+  const appDir = getTemplate(projectType)?.appDir;
+  const opts = { framework: "nextjs" };
+  if (appDir && appDir !== ".") {
+    opts.rootDirectory = appDir;
+  }
+  return opts;
+}
+
 module.exports = {
   TEMPLATES,
   getTemplate,
@@ -158,4 +173,5 @@ module.exports = {
   apiUrlSecretsPath,
   vercelSyncPath,
   renderSyncPath,
+  getVercelProjectCreateOptions,
 };

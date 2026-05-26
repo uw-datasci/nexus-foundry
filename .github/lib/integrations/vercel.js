@@ -88,8 +88,10 @@ class VercelClient {
   /**
    * @param {string} projectName
    * @param {string} githubOrg
+   * @param {{ framework: "nextjs"; rootDirectory?: string }} [createOptions]
    */
-  async ensureVercelProject(projectName, githubOrg) {
+  async ensureVercelProject(projectName, githubOrg, createOptions) {
+    const createOpts = createOptions ?? { framework: "nextjs" };
     const teamQuery = new URLSearchParams({
       teamId: this.vercelTeamId,
     }).toString();
@@ -110,10 +112,12 @@ class VercelClient {
 
     const body = {
       name: projectName,
+      framework: createOpts.framework,
       gitRepository: {
         type: "github",
         repo: `${githubOrg}/${projectName}`,
       },
+      ...(createOpts.rootDirectory ? { rootDirectory: createOpts.rootDirectory } : {}),
     };
 
     const created = await this.vercelRequest(`/v11/projects?${teamQuery}`, {
@@ -121,7 +125,10 @@ class VercelClient {
       body,
     });
     const id = this.readVercelProjectId(created);
-    console.log(`Vercel: created project '${projectName}' (id: ${id}).`);
+    const rootLabel = createOpts.rootDirectory ?? "(repo root)";
+    console.log(
+      `Vercel: created project '${projectName}' (id: ${id}, framework: ${createOpts.framework}, root: ${rootLabel}).`,
+    );
     return { id, name: projectName };
   }
 
