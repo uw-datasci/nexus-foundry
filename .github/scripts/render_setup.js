@@ -4,7 +4,7 @@ const { execFileSync } = require("node:child_process");
 
 const { Infisical } = require("../lib/integrations/infisical.js");
 const { RenderClient } = require("../lib/integrations/render.js");
-const { apiUrlSecretsPath, renderSyncPath } = require("../lib/templates.js");
+const { apiUrlSecretsPath, getTemplate, renderSyncPath } = require("../lib/templates.js");
 
 class RenderSetupPreprocessor {
   assertRequiredEnv(keys) {
