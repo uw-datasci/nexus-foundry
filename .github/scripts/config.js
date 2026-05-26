@@ -111,15 +111,31 @@ class ConfigPreprocessor {
 
 class ConfigSetup {
   /**
-   * Stages only the intended files (never the generated lockfile or node_modules),
-   * commits, and pushes to main. No-ops if nothing changed.
+   * Refreshes the lockfile after `pnpm add` (or other manifest edits).
+   *
+   * @param {string} workdir
+   */
+  syncLockfile(workdir) {
+    execFileSync("pnpm", ["install"], { cwd: workdir, stdio: "inherit" });
+    console.log("config: ran pnpm install to refresh lockfile.");
+  }
+
+  /**
+   * Stages only the intended files (never node_modules), commits, and pushes to
+   * main. No-ops if nothing changed.
+   *
+   * Returns the SHA on `main` after the push (or `null` when nothing was
+   * committed) so callers can correlate downstream workflow runs with the
+   * exact commit they triggered.
    *
    * @param {string} workdir
    * @param {{ appDir: string; configDir: string; hasApi?: boolean; apiDir?: string }} template
    * @param {{ s3?: boolean; workflowFiles?: string[] }} [opts]
+   * @returns {string | null}
    */
   commitAndPush(workdir, template, opts = {}) {
     const filePaths = [
+      "pnpm-lock.yaml",
       path.posix.join(template.configDir, "server.ts"),
       path.posix.join(template.configDir, "db.ts"),
       path.posix.join(template.appDir, "package.json"),
@@ -155,7 +171,7 @@ class ConfigSetup {
     }).trim();
     if (!staged) {
       console.log("config: no changes to commit (skip).");
-      return;
+      return null;
     }
 
     execFileSync("git", ["commit", "-m", "chore: apply foundry configuration"], {
@@ -166,7 +182,12 @@ class ConfigSetup {
       cwd: workdir,
       stdio: "inherit",
     });
-    console.log("config: pushed configuration commit.");
+    const commitSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: workdir,
+      encoding: "utf8",
+    }).trim();
+    console.log(`config: pushed configuration commit ${commitSha}.`);
+    return commitSha;
   }
 
   /**
@@ -473,7 +494,8 @@ class ConfigSetup {
     await this[scenario](workdir, template);
     if (s3) this.s3(workdir, template);
     const workflowFiles = this.applyWorkflowInfisicalPaths(workdir, projectName, template);
-    this.commitAndPush(workdir, template, { s3, workflowFiles });
+    this.syncLockfile(workdir);
+    return this.commitAndPush(workdir, template, { s3, workflowFiles });
   }
 }
 
@@ -484,7 +506,13 @@ async function main() {
 
   console.log(`Config setup for '${projectName}' (${projectType}, ${scenario}, s3: ${s3}).`);
 
-  await setup.run(scenario, projectName, projectType, org, token, s3);
+  const commitSha = await setup.run(scenario, projectName, projectType, org, token, s3);
+
+  // Expose the pushed SHA so downstream jobs (notably render_setup) can wait
+  // on the deploy-api.yml run that this push triggered.
+  if (commitSha && process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, `commit_sha=${commitSha}\n`);
+  }
 }
 
 module.exports = { main, ConfigSetup };
