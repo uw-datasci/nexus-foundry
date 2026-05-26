@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-const { TEMPLATES } = require("../lib/templates");
+const { TEMPLATES, infisicalPath } = require("../lib/templates");
 const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
 const { cloneRepo } = require("../lib/git");
 
@@ -116,7 +116,7 @@ class ConfigSetup {
    *
    * @param {string} workdir
    * @param {{ appDir: string; configDir: string; hasApi?: boolean; apiDir?: string }} template
-   * @param {{ s3?: boolean }} [opts]
+   * @param {{ s3?: boolean; workflowFiles?: string[] }} [opts]
    */
   commitAndPush(workdir, template, opts = {}) {
     const filePaths = [
@@ -139,6 +139,10 @@ class ConfigSetup {
       } else {
         filePaths.push(path.posix.join(template.configDir, "r2.ts"));
       }
+    }
+
+    if (opts.workflowFiles?.length) {
+      filePaths.push(...opts.workflowFiles);
     }
 
     // Stage only files that exist (e.g. db.ts is absent for non-neon scenarios).
@@ -389,6 +393,70 @@ class ConfigSetup {
     );
   }
 
+  /**
+   * Resolves `INFISICAL_<NAME>_PATH: <insert-path-here> # TODO: Update this value`
+   * placeholders in `.github/workflows/*.yml|*.yaml` of the generated repo.
+   *
+   * Mapping:
+   *   - NAME == "SECRET"                   → /{projectName}                  (single-app templates)
+   *   - NAME.toLowerCase() ∈ subfolders    → /{projectName}/{name.toLowerCase()}
+   *   - anything else                      → throw (template drift)
+   *
+   * Returns the repo-relative paths it modified, so the caller can stage them.
+   *
+   * @param {string} workdir
+   * @param {string} projectName
+   * @param {{ infisical?: { subfolders?: string[] } }} template
+   * @returns {string[]}
+   */
+  applyWorkflowInfisicalPaths(workdir, projectName, template) {
+    const workflowsRel = path.posix.join(".github", "workflows");
+    const workflowsAbs = path.join(workdir, workflowsRel);
+    if (!fs.existsSync(workflowsAbs)) {
+      console.log(`config: no ${workflowsRel} directory in generated repo (skip).`);
+      return [];
+    }
+
+    const subfolders = new Set(template.infisical?.subfolders ?? []);
+    const pattern =
+      /^([ \t]*INFISICAL_([A-Z][A-Z0-9_]*)_PATH:[ \t]*)<insert-path-here>[ \t]*#[ \t]*TODO:[^\n]*$/gm;
+
+    const resolve = (name) => {
+      if (name === "SECRET") return infisicalPath(projectName, null);
+      const folder = name.toLowerCase();
+      if (subfolders.has(folder)) return infisicalPath(projectName, folder);
+      throw new Error(
+        `config: cannot resolve INFISICAL_${name}_PATH — '${folder}' is not in template.infisical.subfolders (${[...subfolders].join(", ") || "none"}).`,
+      );
+    };
+
+    const modified = [];
+    for (const entry of fs.readdirSync(workflowsAbs, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!/\.ya?ml$/.test(entry.name)) continue;
+
+      const relPath = path.posix.join(workflowsRel, entry.name);
+      const absPath = path.join(workflowsAbs, entry.name);
+      const original = fs.readFileSync(absPath, "utf8");
+
+      const changes = [];
+      const updated = original.replace(pattern, (_match, prefix, name) => {
+        const resolved = resolve(name);
+        changes.push({ name, resolved });
+        return `${prefix}${resolved}`;
+      });
+
+      if (updated === original) continue;
+      fs.writeFileSync(absPath, updated);
+      for (const { name, resolved } of changes) {
+        console.log(`config: resolved INFISICAL_${name}_PATH in ${relPath} → ${resolved}.`);
+      }
+      modified.push(relPath);
+    }
+
+    return modified;
+  }
+
   async run(scenario, projectName, projectType, org, token, s3) {
     if (!SCENARIO_KEYS.has(scenario)) throw new Error(`Unhandled scenario: ${scenario}`);
 
@@ -401,7 +469,8 @@ class ConfigSetup {
     const workdir = cloneRepo(org, projectName, token);
     await this[scenario](workdir, template);
     if (s3) this.s3(workdir, template);
-    this.commitAndPush(workdir, template, { s3 });
+    const workflowFiles = this.applyWorkflowInfisicalPaths(workdir, projectName, template);
+    this.commitAndPush(workdir, template, { s3, workflowFiles });
   }
 }
 
