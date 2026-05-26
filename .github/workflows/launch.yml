@@ -251,47 +251,13 @@ jobs:
             const { main } = require("${{ github.workspace }}/.github/scripts/vercel_setup.js");
             await main();
 
-  render_setup:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: [setup, create_repo, db_setup, s3_setup, redis_setup]
-    if: |
-      always() &&
-      needs.create_repo.result == 'success' &&
-      needs.setup.outputs.has_api == 'true' &&
-      needs.db_setup.result == 'success' &&
-      (needs.s3_setup.result == 'success' || needs.s3_setup.result == 'skipped') &&
-      (needs.redis_setup.result == 'success' || needs.redis_setup.result == 'skipped')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Create Render web service and Infisical secret syncs
-        uses: actions/github-script@v9
-        env:
-          PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
-          PROJECT_TYPE: ${{ needs.setup.outputs.project_type }}
-          GITHUB_ORG: ${{ github.repository_owner }}
-          GH_TOKEN: ${{ secrets.FOUNDRY_GITHUB_TOKEN }}
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_OWNER_ID: ${{ secrets.RENDER_OWNER_ID }}
-          RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
-          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
-          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
-          INFISICAL_RENDER_CONNECTION_ID: ${{ secrets.INFISICAL_RENDER_CONNECTION_ID }}
-        with:
-          script: |
-            const { main } = require("${{ github.workspace }}/.github/scripts/render_setup.js");
-            await main();
-
   config:
     runs-on: ubuntu-latest
-    needs: [setup, create_repo, vercel_setup, render_setup]
+    needs: [setup, create_repo, vercel_setup]
     if: |
       always() &&
       needs.create_repo.result == 'success' &&
-      needs.vercel_setup.result == 'success' &&
-      (needs.render_setup.result == 'success' || needs.render_setup.result == 'skipped')
+      needs.vercel_setup.result == 'success'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -320,6 +286,38 @@ jobs:
         with:
           script: |
             const { main } = require("${{ github.workspace }}/.github/scripts/config.js");
+            await main();
+
+  render_setup:
+    runs-on: ubuntu-latest
+    needs: [setup, config, db_setup, s3_setup, redis_setup]
+    if: |
+      always() &&
+      needs.setup.outputs.has_api == 'true' &&
+      needs.config.result == 'success' &&
+      needs.db_setup.result == 'success' &&
+      (needs.s3_setup.result == 'success' || needs.s3_setup.result == 'skipped') &&
+      (needs.redis_setup.result == 'success' || needs.redis_setup.result == 'skipped')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Create Render web service and Infisical secret syncs
+        uses: actions/github-script@v9
+        env:
+          PROJECT_NAME: ${{ needs.setup.outputs.project_name }}
+          PROJECT_TYPE: ${{ needs.setup.outputs.project_type }}
+          GITHUB_ORG: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.FOUNDRY_GITHUB_TOKEN }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_OWNER_ID: ${{ secrets.RENDER_OWNER_ID }}
+          RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
+          GHCR_PULL_USERNAME: ${{ secrets.GHCR_PULL_USERNAME }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          INFISICAL_RENDER_CONNECTION_ID: ${{ secrets.INFISICAL_RENDER_CONNECTION_ID }}
+        with:
+          script: |
+            const { main } = require("${{ github.workspace }}/.github/scripts/render_setup.js");
             await main();
 
   codegen:

@@ -22,7 +22,6 @@
  * @property {string} [apiHealthCheckPath]
  * @property {number} [apiPort]
  * @property {string | null} [apiPnpmFilter]
- * @property {string} [apiDeployWorkflow]
  * @property {InfisicalLayout} infisical
  *
  * @type {Record<string, TemplateLayout>}
@@ -50,7 +49,6 @@ const TEMPLATES = {
     apiHealthCheckPath: "/health",
     apiPort: 8000,
     apiPnpmFilter: "api",
-    apiDeployWorkflow: "deploy-api.yml",
     infisical: {
       subfolders: ["web", "api"],
       platform: "api",
