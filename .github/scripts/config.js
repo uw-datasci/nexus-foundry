@@ -367,7 +367,10 @@ class ConfigSetup {
         const block =
           "\n# Cloudflare R2 (S3-compatible) — provisioned by the foundry s3 setup job\n" +
           "R2_ACCOUNT_ID=\nR2_ACCESS_KEY_ID=\nR2_SECRET_ACCESS_KEY=\nR2_BUCKET_NAME=\n";
-        fs.writeFileSync(envExamplePath, example.endsWith("\n") ? example + block : `${example}\n${block}`);
+        fs.writeFileSync(
+          envExamplePath,
+          example.endsWith("\n") ? example + block : `${example}\n${block}`,
+        );
         console.log(`config: appended R2_* to ${apiDir}/.env.example.`);
       }
     }
