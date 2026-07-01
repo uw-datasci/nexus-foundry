@@ -71,7 +71,6 @@ env:
 jobs:
   setup:
     runs-on: ubuntu-latest
-    environment: nexus-queue
     outputs:
       project_name: ${{ steps.payload.outputs.project_name }}
       team_access: ${{ steps.payload.outputs.team_access }}
