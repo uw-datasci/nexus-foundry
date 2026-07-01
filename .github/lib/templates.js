@@ -23,6 +23,8 @@
  * @property {string} [apiHealthCheckPath]
  * @property {number} [apiPort]
  * @property {string | null} [apiPnpmFilter]
+ * @property {boolean} [usesRaftSdk]  Whether generated repos consume the Raft SDK and
+ *   should be auto-registered in `.github/context/raft-consumers.json`.
  * @property {InfisicalLayout} infisical
  *
  * @type {Record<string, TemplateLayout>}
@@ -33,6 +35,7 @@ const TEMPLATES = {
     configDir: "config",
     pnpmFilter: null,
     hasApi: false,
+    usesRaftSdk: true,
     infisical: {
       subfolders: [],
       platform: null,
@@ -50,6 +53,7 @@ const TEMPLATES = {
     apiHealthCheckPath: "/health",
     apiPort: 8000,
     apiPnpmFilter: "api",
+    usesRaftSdk: true,
     infisical: {
       subfolders: ["web", "api", "db"],
       platform: "api",

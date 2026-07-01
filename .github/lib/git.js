@@ -69,9 +69,18 @@ function commitAll(workdir, message) {
 /**
  * @param {string} workdir
  * @param {string} branch
+ * @param {{ force?: boolean }} [opts] Force-push when the branch is recreated
+ *   from a moving base each run, e.g. a long-lived bot branch that mirrors an
+ *   upstream source rather than accumulating history. Plain `--force` (not
+ *   `--force-with-lease`) because these clones never fetch the remote branch
+ *   being replaced, so there is no local tracking ref to lease against, and
+ *   the branch is exclusively bot-owned.
  */
-function pushBranch(workdir, branch) {
-  git(["push", "origin", `HEAD:${branch}`], workdir, { stdio: "inherit" });
+function pushBranch(workdir, branch, opts = {}) {
+  const args = ["push"];
+  if (opts.force) args.push("--force");
+  args.push("origin", `HEAD:${branch}`);
+  git(args, workdir, { stdio: "inherit" });
 }
 
 /**

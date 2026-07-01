@@ -1,0 +1,34 @@
+name: Raft Context Sync
+
+on:
+  repository_dispatch:
+    types: [raft-context-sync]
+
+permissions:
+  contents: read # cross-repo writes use FOUNDRY_GITHUB_TOKEN, not GITHUB_TOKEN
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Fan out raft-reference.md to consumer repos
+        uses: actions/github-script@v9
+        env:
+          GH_TOKEN: ${{ secrets.FOUNDRY_GITHUB_TOKEN }}
+          RAW_URL: ${{ github.event.client_payload.raw_url }}
+          SOURCE_SHA: ${{ github.event.client_payload.sha }}
+          SOURCE_REF: ${{ github.event.client_payload.ref }}
+          SOURCE_FILE: ${{ github.event.client_payload.source }}
+          TARGET_PATH: ${{ github.event.client_payload.target_path }}
+        with:
+          script: |
+            const { main } = require("${{ github.workspace }}/.github/scripts/raft_context_sync.js");
+            await main();
