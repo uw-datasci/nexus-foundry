@@ -7,6 +7,7 @@ const { execFileSync } = require("node:child_process");
 const { TEMPLATES, infisicalPath } = require("../lib/templates");
 const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
 const { cloneRepo } = require("../lib/git");
+const { withCiPnpmConfig } = require("../lib/pnpm.js");
 
 const DB_TS_CONTENTS = `import "server-only";
 import { neon } from "@neondatabase/serverless";
@@ -111,12 +112,20 @@ class ConfigPreprocessor {
 
 class ConfigSetup {
   /**
+   * @param {string} workdir
+   * @param {string[]} args
+   */
+  runPnpm(workdir, args) {
+    execFileSync("pnpm", withCiPnpmConfig(args), { cwd: workdir, stdio: "inherit" });
+  }
+
+  /**
    * Refreshes the lockfile after `pnpm add` (or other manifest edits).
    *
    * @param {string} workdir
    */
   syncLockfile(workdir) {
-    execFileSync("pnpm", ["install"], { cwd: workdir, stdio: "inherit" });
+    this.runPnpm(workdir, ["install"]);
     console.log("config: ran pnpm install to refresh lockfile.");
   }
 
@@ -216,7 +225,7 @@ class ConfigSetup {
     if (template.pnpmFilter) {
       pnpmArgs.push("--filter", template.pnpmFilter);
     }
-    execFileSync("pnpm", pnpmArgs, { cwd: workdir, stdio: "inherit" });
+    this.runPnpm(workdir, pnpmArgs);
     console.log("config: added @neondatabase/serverless.");
 
     const dbPath = path.join(workdir, template.configDir, "db.ts");
@@ -255,7 +264,8 @@ class ConfigSetup {
   addAwsSdk(workdir, filter) {
     const args = ["add", "@aws-sdk/client-s3"];
     if (filter) args.push("--filter", filter);
-    execFileSync("pnpm", args, { cwd: workdir, stdio: "inherit" });
+
+    this.runPnpm(workdir, args);
     console.log("config: added @aws-sdk/client-s3.");
   }
 

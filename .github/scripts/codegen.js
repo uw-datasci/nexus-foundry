@@ -7,6 +7,7 @@ const { execFileSync } = require("node:child_process");
 const { getTemplate } = require("../lib/templates");
 const { deriveScenario } = require("../lib/scenario");
 const { cloneRepo, createBranch, commitAll, pushBranch, openPr } = require("../lib/git");
+const { withCiPnpmConfig } = require("../lib/pnpm.js");
 
 /** Directory holding the rendered-on-the-fly prompt/instruction templates. */
 const CODEGEN_DIR = path.join(__dirname, "..", "codegen");
@@ -204,7 +205,7 @@ class CodegenSetup {
    */
   runPnpm(args) {
     try {
-      const output = execFileSync("pnpm", args, {
+      const output = execFileSync("pnpm", withCiPnpmConfig(args), {
         cwd: this.workdir,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
