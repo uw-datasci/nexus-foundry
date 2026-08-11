@@ -1,7 +1,4 @@
 {
   "$comment": "Repos that should receive an automated PR whenever nexus-raft's raft-reference.md changes. Each entry is 'owner/repo'; the placeholder below is skipped by raft_context_sync.js. Add real consumers here, then remove the placeholder.",
-  "repos": [
-    "uw-datasci/estimathon-v2",
-    "uw-datasci/cxc"
-  ]
+  "repos": ["uw-datasci/estimathon-v2"]
 }
