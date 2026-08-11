@@ -5,7 +5,7 @@ const { Infisical } = require("../lib/integrations/infisical.js");
 const { getInfisicalLayout, platformSecretsPath } = require("../lib/templates.js");
 
 /** Infisical environments that each get an isolated bucket + scoped token. */
-const ENVIRONMENTS = ["dev", "staging", "prod"];
+const ENVIRONMENTS = ["dev", "prod"];
 
 class S3SetupPreprocessor {
   assertRequiredEnv(keys) {
@@ -51,7 +51,7 @@ class S3Setup {
   }
 
   /**
-   * Creates one bucket + one bucket-scoped token per environment so dev/staging/
+   * Creates one bucket + one bucket-scoped token per environment so dev and
    * prod are fully isolated, returning the per-environment credential map.
    *
    * Note: R2 token values cannot be read back after creation, so re-running this
