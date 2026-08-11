@@ -98,24 +98,23 @@ class CloudflareClient {
   }
 
   /**
-   * Lists every account-token permission group (paginated).
+   * Fetches a single permission group by exact name via the API `name` filter.
+   * Avoids paginating the full permission-group catalog (~2000 entries).
    *
-   * @returns {Promise<Array<{ id: string; name: string }>>}
+   * @param {string} name
+   * @returns {Promise<{ id: string; name: string }>}
    */
-  async listPermissionGroups() {
-    /** @type {Array<{ id: string; name: string }>} */
-    const all = [];
-    const perPage = 100;
-    for (let page = 1; ; page++) {
-      const params = new URLSearchParams({ per_page: String(perPage), page: String(page) });
-      const data = await this.cfRequest(
-        `/accounts/${this.accountId}/tokens/permission_groups?${params.toString()}`,
-      );
-      const result = Array.isArray(data.result) ? data.result : [];
-      all.push(...result);
-      if (result.length < perPage) break;
+  async getPermissionGroupByName(name) {
+    const params = new URLSearchParams({ name });
+    const data = await this.cfRequest(
+      `/accounts/${this.accountId}/tokens/permission_groups?${params.toString()}`,
+    );
+    const result = Array.isArray(data.result) ? data.result : [];
+    const group = result.find((g) => g.name === name);
+    if (!group?.id) {
+      throw new Error(`Cloudflare: permission group '${name}' not found`);
     }
-    return all;
+    return { id: group.id, name: group.name };
   }
 
   /**
@@ -126,16 +125,9 @@ class CloudflareClient {
    * @returns {Promise<{ read: string; write: string }>}
    */
   async resolveR2PermissionGroupIds() {
-    const groups = await this.listPermissionGroups();
-    const findId = (name) => {
-      const group = groups.find((g) => g.name === name);
-      if (!group) throw new Error(`Cloudflare: permission group '${name}' not found`);
-      return group.id;
-    };
-    return {
-      read: findId("Workers R2 Storage Bucket Item Read"),
-      write: findId("Workers R2 Storage Bucket Item Write"),
-    };
+    const read = await this.getPermissionGroupByName("Workers R2 Storage Bucket Item Read");
+    const write = await this.getPermissionGroupByName("Workers R2 Storage Bucket Item Write");
+    return { read: read.id, write: write.id };
   }
 
   /**

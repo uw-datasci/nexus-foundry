@@ -66,7 +66,9 @@ class S3Setup {
    */
   async provisionPerEnvironment() {
     const { projectName, accountId } = this.ctx;
+    console.log("Cloudflare: resolving R2 permission groups...");
     const permissionGroupIds = await this.cloudflare.resolveR2PermissionGroupIds();
+    console.log("Cloudflare: R2 permission groups resolved.");
 
     /** @type {Record<string, { accountId: string; accessKeyId: string; secretAccessKey: string; bucketName: string }>} */
     const perEnv = {};
