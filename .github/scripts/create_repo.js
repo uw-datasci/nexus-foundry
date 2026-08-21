@@ -18,7 +18,6 @@ for (const key of required) {
 const targetOrg = process.env.TARGET_ORG;
 const projectName = process.env.PROJECT_NAME;
 const projectType = process.env.PROJECT_TYPE;
-const description = process.env.DESCRIPTION ?? "";
 const teamAccess = (process.env.TEAM_ACCESS ?? "").trim();
 const teamPermission = (process.env.TEAM_PERMISSION ?? "push")
   .trim()
@@ -51,10 +50,6 @@ const args = [
   "-F",
   "include_all_branches=false",
 ];
-
-if (description.trim()) {
-  args.push("-f", `description=${description}`);
-}
 
 execFileSync("gh", args, { stdio: "inherit" });
 

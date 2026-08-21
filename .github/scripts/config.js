@@ -7,7 +7,6 @@ const { execFileSync } = require("node:child_process");
 const { TEMPLATES, infisicalPath } = require("../lib/templates");
 const { SCENARIO_KEYS, deriveScenario } = require("../lib/scenario");
 const { cloneRepo } = require("../lib/git");
-const { withCiPnpmConfig } = require("../lib/pnpm.js");
 
 const DB_TS_CONTENTS = `import "server-only";
 import { neon } from "@neondatabase/serverless";
@@ -112,21 +111,17 @@ class ConfigPreprocessor {
 
 class ConfigSetup {
   /**
+   * Runs pnpm with `--lockfile-only`: only `package.json` / `pnpm-lock.yaml`
+   * are touched, nothing is downloaded or linked into `node_modules`. Config
+   * only ever needs the manifest + lockfile updated, and skipping the real
+   * install sidesteps pnpm 11's `strictDepBuilds` gate entirely (no
+   * `ERR_PNPM_IGNORED_BUILDS` / `pnpm approve-builds` prompt in CI).
+   *
    * @param {string} workdir
    * @param {string[]} args
    */
   runPnpm(workdir, args) {
-    execFileSync("pnpm", withCiPnpmConfig(args), { cwd: workdir, stdio: "inherit" });
-  }
-
-  /**
-   * Refreshes the lockfile after `pnpm add` (or other manifest edits).
-   *
-   * @param {string} workdir
-   */
-  syncLockfile(workdir) {
-    this.runPnpm(workdir, ["install"]);
-    console.log("config: ran pnpm install to refresh lockfile.");
+    execFileSync("pnpm", [...args, "--lockfile-only"], { cwd: workdir, stdio: "inherit" });
   }
 
   /**
@@ -565,7 +560,6 @@ class ConfigSetup {
     if (s3) this.s3(workdir, template);
     const workflowFiles = this.applyWorkflowInfisicalPaths(workdir, projectName, template);
     const envFiles = this.applyEnvExampleInfisicalPaths(workdir, projectName, template);
-    this.syncLockfile(workdir);
     return this.commitAndPush(workdir, template, { s3, workflowFiles, envFiles });
   }
 }

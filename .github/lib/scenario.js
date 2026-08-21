@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Canonical database scenario derivation/validation, shared by config.js,
- * db_setup.js, and codegen.js so the rules live in exactly one place.
+ * Canonical database scenario derivation/validation, shared by config.js
+ * and db_setup.js so the rules live in exactly one place.
  */
 
 const SCENARIO_KEYS = new Set(["neon", "supabase", "mongodb", "mongoose"]);

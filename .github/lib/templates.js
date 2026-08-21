@@ -11,8 +11,8 @@
  */
 
 /**
- * Per-template layout. Static config and codegen both differ by where each
- * template keeps its app package and `config/` directory.
+ * Per-template layout. Static config differs by where each template keeps
+ * its app package and `config/` directory.
  *
  * @typedef {Object} TemplateLayout
  * @property {string} appDir

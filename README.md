@@ -1,8 +1,8 @@
 # Nexus Foundry
 
-Nexus Foundry is a GitHub Actions–driven **project launch pipeline**. It takes a template repository and a short questionnaire (database, domain, team access, and so on), then provisions infrastructure, wires secrets, applies static configuration, and opens an initial scaffold PR—all in one workflow run.
+Nexus Foundry is a GitHub Actions–driven **project launch pipeline**. It takes a template repository and a short questionnaire (database, domain, team access, and so on), then provisions infrastructure, wires secrets, and applies static configuration—all in one workflow run.
 
-This repository is the **orchestrator**. It does not contain application code; it contains the workflow, Node scripts, Copilot prompt templates, and shared libraries that operate on **newly generated** repos in your GitHub organization.
+This repository is the **orchestrator**. It does not contain application code; it contains the workflow, Node scripts, and shared libraries that operate on **newly generated** repos in your GitHub organization.
 
 ## What a launch does
 
@@ -34,11 +34,7 @@ flowchart TB
     config["Static DB config → main"]
   end
 
-  subgraph phase5["⑤ Codegen"]
-    codegen["Copilot plan · build · open PR"]
-  end
-
-  DONE(["Scaffold PR ready"])
+  DONE(["Repo ready"])
 
   START --> setup
   setup --> create_repo
@@ -48,14 +44,12 @@ flowchart TB
   secrets_setup --> render_setup
   db_setup --> vercel_setup
   vercel_setup --> config
-  config --> codegen
-  codegen --> DONE
+  config --> DONE
 
   classDef trigger fill:#ddf4ff,stroke:#0969da,stroke-width:2px,color:#0550ae
   classDef bootstrap fill:#f6f8fa,stroke:#8c959f,stroke-width:1.5px,color:#24292f
   classDef platform fill:#fff8c5,stroke:#bf8700,stroke-width:1.5px,color:#633c01
   classDef repo fill:#dafbe1,stroke:#1a7f37,stroke-width:1.5px,color:#116329
-  classDef ai fill:#fbefff,stroke:#8250df,stroke-width:1.5px,color:#5928a5
   classDef resolve fill:#eef2ff,stroke:#6366f1,stroke-width:1.5px,color:#3730a3
 
   class START,DONE trigger
@@ -63,7 +57,6 @@ flowchart TB
   class create_repo,secrets_setup bootstrap
   class db_setup,vercel_setup,render_setup platform
   class config repo
-  class codegen ai
 
   linkStyle default stroke:#8c959f,stroke-width:2px
 ```
@@ -76,7 +69,6 @@ flowchart TB
 | **vercel_setup**  | `vercel_setup.js`  | Create Vercel project, optional custom domain, Infisical → Vercel secret syncs |
 | **render_setup**  | `render_setup.js`  | API templates only: create a free Render web service (image from GHCR) in your Render Project, write `RENDER_SERVICE_ID`/`RENDER_API_KEY` repo secrets, store the service `API_URL` in `/{projectName}/api`, and Infisical → Render secret syncs from `/{projectName}/api` |
 | **config**        | `config.js`        | Clone the new repo, apply static DB wiring (Neon), commit to `main`            |
-| **codegen**       | `codegen.js`       | Plan + scaffold via GitHub Copilot CLI; open PR (draft if verify fails)        |
 
 Planned but commented out in the workflow: **redis_setup**, **s3_setup**.
 
@@ -102,7 +94,6 @@ Send event type `foundry-launch` with a `client_payload` that mirrors the workfl
 | `mongo_client`      | If mongodb  | `mongodb` or `mongoose`                       |
 | `redis`             | No          | `true` or `false` (not wired yet)             |
 | `s3`                | No          | `true` or `false` (not wired yet)             |
-| `description`       | No          | Project description (used in codegen prompts) |
 | `domain`            | Yes         | Production hostname for Vercel                |
 
 Database inputs are validated in `.github/lib/scenario.js`, which maps them to a single **scenario** key: `neon`, `supabase`, `mongodb`, or `mongoose`.
@@ -113,8 +104,7 @@ Configure these on the Foundry repo (and use the `nexus-queue` environment for t
 
 | Secret                                                      | Used by                                           |
 | ----------------------------------------------------------- | ------------------------------------------------- |
-| `FOUNDRY_GITHUB_TOKEN`                                      | Create repo, clone/push generated repos, open PRs |
-| `COPILOT_TOKEN`                                             | Copilot CLI (`COPILOT_GITHUB_TOKEN` in codegen)   |
+| `FOUNDRY_GITHUB_TOKEN`                                      | Create repo, clone/push generated repos            |
 | `INFISICAL_ID` / `INFISICAL_TOKEN` / `INFISICAL_PROJECT_ID` | Infisical machine identity (workflow `env`)       |
 | `INFISICAL_VERCEL_CONNECTION_ID`                            | Infisical → Vercel secret syncs                   |
 | `VERCEL_TOKEN` / `VERCEL_TEAM_ID`                           | Vercel project + domain                           |
@@ -127,26 +117,11 @@ Configure these on the Foundry repo (and use the `nexus-queue` environment for t
 
 The workflow also expects Infisical credentials as `INFISICAL_CLIENT_ID` and `INFISICAL_CLIENT_SECRET` (mapped from `INFISICAL_ID` and `INFISICAL_TOKEN`).
 
-## Codegen
-
-The **codegen** job runs only when `description` is non-empty after trimming whitespace. Otherwise it is skipped and the launch completes without a scaffold PR.
-
-When it runs, it clones the generated repo, writes `AGENTS.md` from a template, then runs three Copilot CLI phases:
-
-1. **Plan** — writes `PLAN.md` (full-app spec)
-2. **Build** — scaffolding stubs aligned with the plan
-3. **Repair** — up to 2 attempts if `pnpm install` / `build` / `typecheck` / `lint` fail
-
-Prompts live in `.github/codegen/` (`plan.prompt.md`, `build.prompt.md`, `repair.prompt.md`, `AGENTS.template.md`). Override models with `COPILOT_PLAN_MODEL`, `COPILOT_BUILD_MODEL`, and `COPILOT_REPAIR_MODEL` (defaults in the workflow: `gpt-5.2`, `gpt-5.2-codex`, `claude-haiku-4.5`).
-
-Successful runs open a normal PR; failed verification opens a **draft** PR with logs in the body.
-
 ## Extending Foundry
 
 1. **New template** — Add an entry to `.github/lib/templates.js` and ensure a matching GitHub template repo exists.
 2. **New database scenario** — Implement methods on `DatabaseSetup` (`db_setup.js`), `ConfigSetup` (`config.js`), and extend `deriveScenario` / `SCENARIO_KEYS` in `scenario.js`.
 3. **New integrations** — Add clients under `.github/scripts/integrations/` and a job step in `launch.yml`.
-4. **Codegen behavior** — Edit prompts in `.github/codegen/` or adjust verification/repair logic in `codegen.js`.
 
 ## Local development
 
@@ -159,13 +134,13 @@ node -e "const { deriveScenario } = require('./.github/lib/scenario'); \
   console.log(deriveScenario({ database: 'postgres', postgresProvider: 'neon' }));"
 ```
 
-Codegen and config jobs need **pnpm**, **Node 24**, and the **Copilot CLI** (`npm install -g @github/copilot`) when run outside Actions.
+The config job needs **pnpm** and **Node 24** when run outside Actions.
 
 ## Implementation status
 
-- **Done:** repo creation, Infisical folders, Neon + Infisical `DATABASE_URL`, Vercel project + domain + secret syncs, Render web service for API templates + secret syncs, Neon static config, Copilot plan/scaffold PR flow
+- **Done:** repo creation, Infisical folders, Neon + Infisical `DATABASE_URL`, Vercel project + domain + secret syncs, Render web service for API templates + secret syncs, Neon static config
 - **Stub / planned:** Supabase, MongoDB/Mongoose, Redis, S3
 
 ---
 
-Maintained as infrastructure for DSC. For questions about a **generated** app, see that repo’s `AGENTS.md` and `PLAN.md` after launch.
+Maintained as infrastructure for DSC.
