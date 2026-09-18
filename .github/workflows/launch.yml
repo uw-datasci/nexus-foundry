@@ -253,6 +253,10 @@ jobs:
   config:
     runs-on: ubuntu-latest
     needs: [setup, create_repo, vercel_setup]
+    if: |
+      !cancelled() &&
+      needs.create_repo.result == 'success' &&
+      needs.vercel_setup.result == 'success'
     outputs:
       commit_sha: ${{ steps.apply.outputs.commit_sha }}
     steps:
@@ -289,6 +293,7 @@ jobs:
   render_setup:
     runs-on: ubuntu-latest
     needs: [setup, config]
+    if: ${{ !cancelled() && needs.config.result == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
