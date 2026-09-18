@@ -4,7 +4,14 @@ const { Infisical } = require("../lib/integrations/infisical.js");
 const { VercelClient } = require("../lib/integrations/vercel.js");
 const { getVercelProjectCreateOptions, vercelSyncPath } = require("../lib/templates.js");
 
+/** A single DNS label: alphanumeric, inner hyphens allowed, 63 chars max. */
+const DNS_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
 /**
+ * Normalize a hostname, returning "" for anything unusable so the caller can
+ * skip domain setup. Callers that build a host from an optional subdomain can
+ * send values like ".example.com"; those are treated as "no domain".
+ *
  * @param {string} raw
  * @returns {string}
  */
@@ -13,8 +20,13 @@ function normalizeDomain(raw) {
   let s = raw.trim().toLowerCase();
   if (!s) return "";
   s = s.replace(/^https?:\/\//, "");
-  const host = s.split("/")[0].split(":")[0];
-  return host || "";
+  const host = s.split("/")[0].split(":")[0].replace(/\.$/, "");
+  if (!host) return "";
+
+  const labels = host.split(".");
+  if (labels.length < 2) return "";
+  if (!labels.every((label) => DNS_LABEL.test(label))) return "";
+  return host;
 }
 
 class VercelSetupPreprocessor {
@@ -37,7 +49,11 @@ class VercelSetupPreprocessor {
       "INFISICAL_VERCEL_CONNECTION_ID",
     ]);
 
-    const domain = normalizeDomain(process.env.DOMAIN ?? "");
+    const rawDomain = (process.env.DOMAIN ?? "").trim();
+    const domain = normalizeDomain(rawDomain);
+    if (rawDomain && !domain) {
+      console.warn(`Vercel: ignoring unusable domain '${rawDomain}'.`);
+    }
     const projectType = process.env.PROJECT_TYPE.trim();
 
     return {
