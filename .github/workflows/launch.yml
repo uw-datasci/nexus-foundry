@@ -48,8 +48,9 @@ on:
         default: "false"
         type: string
       domain:
-        description: "Production hostname for Vercel"
-        required: true
+        description: "Production hostname for Vercel (leave blank to skip domain setup)"
+        required: false
+        default: ""
         type: string
 
   repository_dispatch:
@@ -116,7 +117,7 @@ jobs:
           echo "Mongo client: ${{ steps.payload.outputs.mongo_client }}"
           echo "Redis: ${{ steps.payload.outputs.redis }}"
           echo "S3: ${{ steps.payload.outputs.s3 }}"
-          echo "Domain: ${{ steps.payload.outputs.domain }}"
+          echo "Domain: ${{ steps.payload.outputs.domain || '(none, skipping domain setup)' }}"
 
   create_repo:
     runs-on: ubuntu-latest

@@ -240,6 +240,8 @@ class VercelSetup {
     );
     if (domain) {
       await this.vercel.applyLaunchDomain(vercelProjectName, domain);
+    } else {
+      console.log("Vercel: no domain provided, skipping domain setup.");
     }
     await this.ensureInfisicalVercelSyncs(vercelAppId);
   }
