@@ -10,6 +10,9 @@ const { apiUrlSecretsPath, getTemplate, renderSyncPath } = require("../lib/templ
 const DEPLOY_API_WORKFLOW = "deploy-api.yml";
 const DEPLOY_API_WAIT_TIMEOUT_MS = 15 * 60 * 1000;
 const DEPLOY_API_POLL_INTERVAL_MS = 15 * 1000;
+const DEPLOY_API_DISPATCH_SETTLE_MS = 10 * 1000;
+const FAILED_LOG_TAIL_LINES = 25;
+const FAILED_LOG_ERROR_LINES = 10;
 const INFISICAL_DEV_API_URL = "http://localhost:8000";
 
 class RenderSetupPreprocessor {
@@ -74,7 +77,111 @@ class RenderSetup {
   }
 
   /**
-   * Blocks until the `deploy-api.yml` run triggered by config's push reaches a
+   * Runs `gh run list` for `deploy-api.yml`, narrowed by `selector`.
+   *
+   * @param {string} repo
+   * @param {string[]} selector extra `gh run list` filters identifying the run
+   * @returns {{ databaseId: number; status: string; conclusion: string | null; url: string } | undefined}
+   */
+  findDeployApiRun(repo, selector) {
+    const stdout = execFileSync(
+      "gh",
+      [
+        "run",
+        "list",
+        "--repo",
+        repo,
+        "--workflow",
+        DEPLOY_API_WORKFLOW,
+        ...selector,
+        "--limit",
+        "1",
+        "--json",
+        "databaseId,status,conclusion,url",
+      ],
+      { encoding: "utf8" },
+    );
+
+    /** @type {Array<{ databaseId: number; status: string; conclusion: string | null; url: string }>} */
+    const runs = JSON.parse(stdout || "[]");
+    return runs[0];
+  }
+
+  /**
+   * Best-effort diagnostics for a failed run. The caller is about to abort the
+   * launch, and generated repos are usually deleted before anyone opens their
+   * Actions tab — so fold the failing job, its first failing step, and a tail
+   * of that step's log into the error itself.
+   *
+   * Never throws: a diagnostics failure must not mask the real error.
+   *
+   * @param {string} repo
+   * @param {number} runId
+   * @returns {string} text to append to the error message ("" when nothing read)
+   */
+  describeFailedRun(repo, runId) {
+    /** @type {string[]} */
+    const lines = [];
+
+    try {
+      const stdout = execFileSync(
+        "gh",
+        ["run", "view", String(runId), "--repo", repo, "--json", "jobs"],
+        { encoding: "utf8" },
+      );
+      const parsed = JSON.parse(stdout || "{}");
+      const jobs = Array.isArray(parsed.jobs) ? parsed.jobs : [];
+      for (const job of jobs) {
+        if (job.conclusion === "success" || job.conclusion === "skipped") continue;
+        const steps = Array.isArray(job.steps) ? job.steps : [];
+        const step = steps.find(
+          (s) => s.conclusion && s.conclusion !== "success" && s.conclusion !== "skipped",
+        );
+        lines.push(
+          step
+            ? `  failed job '${job.name}' at step '${step.name}' (${step.conclusion})`
+            : `  failed job '${job.name}' (${job.conclusion})`,
+        );
+      }
+    } catch (err) {
+      lines.push(`  (could not read job list: ${err?.message ?? err})`);
+    }
+
+    try {
+      const log = execFileSync(
+        "gh",
+        ["run", "view", String(runId), "--repo", repo, "--log-failed"],
+        { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+      );
+      const logLines = log
+        .trimEnd()
+        .split("\n")
+        .filter((l) => l !== "");
+
+      // The tail is usually post-job cleanup, so pull the ##[error] annotations
+      // out first — that is nearly always the line someone actually needs.
+      const errors = logLines
+        .filter((l) => l.includes("##[error]"))
+        .slice(-FAILED_LOG_ERROR_LINES);
+      if (errors.length > 0) {
+        lines.push("  --- error annotations ---");
+        for (const line of errors) lines.push(`  ${line}`);
+      }
+
+      const tail = logLines.slice(-FAILED_LOG_TAIL_LINES);
+      if (tail.length > 0) {
+        lines.push(`  --- last ${tail.length} line(s) of the failing step ---`);
+        for (const line of tail) lines.push(`  ${line}`);
+      }
+    } catch (err) {
+      lines.push(`  (could not read failed log: ${err?.message ?? err})`);
+    }
+
+    return lines.length > 0 ? `\n${lines.join("\n")}` : "";
+  }
+
+  /**
+   * Blocks until the `deploy-api.yml` run identified by `selector` reaches a
    * terminal state. We need the image at GHCR before Render can pull it, so a
    * successful build job is a hard prerequisite for `ensureWebService`.
    *
@@ -84,43 +191,27 @@ class RenderSetup {
    * service that points at a non-existent image just produces a broken
    * service.
    *
-   * @param {string} commitSha
+   * @param {string[]} selector extra `gh run list` filters identifying the run
+   * @param {string} label human-readable description of `selector`, for logs
+   * @param {{ minRunId?: number }} [opts] ignore runs at or below this id, so a
+   *   stale run matching the same selector is never mistaken for the new one
    */
-  async waitForDeployApiRun(commitSha) {
+  async waitForDeployApiRun(selector, label, opts = {}) {
     const { githubOrg, projectName } = this.ctx;
     const repo = `${githubOrg}/${projectName}`;
+    const minRunId = opts.minRunId ?? 0;
     const deadline = Date.now() + DEPLOY_API_WAIT_TIMEOUT_MS;
 
-    console.log(
-      `GitHub: waiting for ${DEPLOY_API_WORKFLOW} run on ${repo} for commit ${commitSha}…`,
-    );
+    console.log(`GitHub: waiting for ${DEPLOY_API_WORKFLOW} run on ${repo} for ${label}…`);
 
     while (Date.now() < deadline) {
-      const stdout = execFileSync(
-        "gh",
-        [
-          "run",
-          "list",
-          "--repo",
-          repo,
-          "--workflow",
-          DEPLOY_API_WORKFLOW,
-          "--commit",
-          commitSha,
-          "--limit",
-          "1",
-          "--json",
-          "databaseId,status,conclusion,url",
-        ],
-        { encoding: "utf8" },
-      );
-
-      /** @type {Array<{ databaseId: number; status: string; conclusion: string | null; url: string }>} */
-      const runs = JSON.parse(stdout || "[]");
-      const run = runs[0];
+      const found = this.findDeployApiRun(repo, selector);
+      // Run ids increase monotonically, so anything at or below the id we saw
+      // before dispatching predates it.
+      const run = found && found.databaseId > minRunId ? found : undefined;
 
       if (!run) {
-        console.log(`GitHub: no ${DEPLOY_API_WORKFLOW} run yet for ${commitSha}; waiting…`);
+        console.log(`GitHub: no ${DEPLOY_API_WORKFLOW} run yet for ${label}; waiting…`);
       } else if (run.status !== "completed") {
         console.log(`GitHub: run ${run.databaseId} status=${run.status}; waiting…`);
       } else if (run.conclusion === "success") {
@@ -128,7 +219,9 @@ class RenderSetup {
         return;
       } else {
         throw new Error(
-          `${DEPLOY_API_WORKFLOW} run ${run.databaseId} concluded '${run.conclusion}' (${run.url}); refusing to create Render service without a pushed image.`,
+          `${DEPLOY_API_WORKFLOW} run ${run.databaseId} concluded '${run.conclusion}' (${run.url}); ` +
+            "refusing to create Render service without a pushed image." +
+            this.describeFailedRun(repo, run.databaseId),
         );
       }
 
@@ -136,8 +229,38 @@ class RenderSetup {
     }
 
     throw new Error(
-      `Timed out after ${DEPLOY_API_WAIT_TIMEOUT_MS / 1000}s waiting for ${DEPLOY_API_WORKFLOW} run on ${repo} for commit ${commitSha}.`,
+      `Timed out after ${DEPLOY_API_WAIT_TIMEOUT_MS / 1000}s waiting for ${DEPLOY_API_WORKFLOW} run on ${repo} for ${label}.`,
     );
+  }
+
+  /**
+   * `config` had nothing to commit, so no push triggered `deploy-api.yml` and
+   * there is no commit to correlate a run against. Dispatch the workflow
+   * explicitly (it declares `workflow_dispatch`) and wait on that run, so a
+   * Render service is never created against an image that was never built.
+   */
+  async dispatchAndWaitForDeployApi() {
+    const { githubOrg, projectName } = this.ctx;
+    const repo = `${githubOrg}/${projectName}`;
+
+    const selector = ["--event", "workflow_dispatch"];
+    const previous = this.findDeployApiRun(repo, selector);
+    const minRunId = previous?.databaseId ?? 0;
+
+    console.log(
+      `GitHub: no config commit; dispatching ${DEPLOY_API_WORKFLOW} on ${repo} to build the initial image…`,
+    );
+    execFileSync(
+      "gh",
+      ["workflow", "run", DEPLOY_API_WORKFLOW, "--repo", repo, "--ref", "main"],
+      {
+        stdio: ["ignore", "inherit", "inherit"],
+      },
+    );
+
+    await sleep(DEPLOY_API_DISPATCH_SETTLE_MS);
+
+    await this.waitForDeployApiRun(selector, "workflow_dispatch", { minRunId });
   }
 
   /**
@@ -317,11 +440,12 @@ class RenderSetup {
     }
 
     if (configCommitSha) {
-      await this.waitForDeployApiRun(configCommitSha);
-    } else {
-      console.warn(
-        "Render: CONFIG_COMMIT_SHA not provided; proceeding without waiting for deploy-api.yml. The Render service may come up before its image exists.",
+      await this.waitForDeployApiRun(
+        ["--commit", configCommitSha],
+        `commit ${configCommitSha}`,
       );
+    } else {
+      await this.dispatchAndWaitForDeployApi();
     }
 
     const environmentId = await this.render.getProjectEnvironmentId(renderProjectId);
@@ -358,4 +482,4 @@ async function main() {
   await setup.run();
 }
 
-module.exports = { main };
+module.exports = { main, RenderSetup };
