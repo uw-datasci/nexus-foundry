@@ -3,12 +3,6 @@ name: Raft Context Sync
 on:
   repository_dispatch:
     types: [raft-context-sync]
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: 'Type "sync" to confirm fan-out to all consumer repos'
-        required: true
-        type: string
 
 permissions:
   contents: read # cross-repo writes use FOUNDRY_GITHUB_TOKEN, not GITHUB_TOKEN
@@ -17,16 +11,6 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify manual confirmation
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          CONFIRM: ${{ inputs.confirm }}
-        run: |
-          if [ "$CONFIRM" != "sync" ]; then
-            echo "::error::Confirmation must be exactly 'sync'. Aborting."
-            exit 1
-          fi
-
       - name: Checkout repository
         uses: actions/checkout@v6
 
